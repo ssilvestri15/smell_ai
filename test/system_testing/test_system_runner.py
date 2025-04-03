@@ -1,5 +1,3 @@
-# file: test/system_testing/system_tests_runner.py
-
 import os
 import subprocess
 import pytest
@@ -320,7 +318,7 @@ def test_system_case(tc_dir):
 
     # 2) Prepara il comando CLI
     cmd = [
-        "python", "cli/cli_runner.py",
+        "python", "-m", "cli.cli_runner",
         "--input", tc_path,
         "--output", output_dir,
         "--max_walkers", str(max_walkers),
