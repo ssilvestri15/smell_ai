@@ -3,6 +3,13 @@ import subprocess
 import pytest
 import pandas as pd
 import shutil
+import stat
+
+def make_unreadable(path):
+    os.chmod(path, 0)
+
+def make_readable(path):
+    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 BASE_DIR = os.path.abspath("test/system_testing")
 
@@ -42,6 +49,9 @@ TEST_CASES = {
         "max_walkers": 5,
         "resume": False,
         "multiple": False,
+        "unreadable_paths": [
+            "test/system_testing/TC3/matrix_multiplication_misused.py"
+        ]
     },
 
     # TC4 => NF>1, EF=.py, NP>1, generico => NCS>1 => >=2,
@@ -155,13 +165,18 @@ TEST_CASES = {
     # NF>1, EF=.py, NP>1, SD=annidata, NCS=0 => ERR=file non leggibile =>
     # => expected_error=False, => no smells
     "TC13": {
-        "expected_error": True,
+        "expected_error": False,
         "expected_smells": 0,     # nessuno smell, perché nessun file analizzato
         "description": "File non leggibili nei progetti annidati => 0 smell, ma nessun errore",
         "parallel": True,
         "max_walkers": 6,
         "resume": False,
         "multiple": True,
+        "unreadable_paths": [
+            "test/system_testing/TC13/Project1/MockDirectory/MockDirectory2/chain_indexing.py",
+            "test/system_testing/TC13/Project1/MockDirectory/merge_parameter_not_set.py",
+            "test/system_testing/TC13/Project2/chain_indexing.py"
+        ]
     },
 
     # ================ TC14 ================
@@ -339,9 +354,25 @@ def test_system_case(tc_dir):
         assert proc.returncode != 0, f"{tc_dir} doveva interrompersi"
         return
 
+    # --- Gestione file non leggibili, se richiesto ---
+    unreadable_paths = cfg.get("unreadable_paths", [])
+    made_unreadable = []
+
+    for rel_path in unreadable_paths:
+        full_path = os.path.abspath(rel_path)
+        if os.path.exists(full_path):
+            make_unreadable(full_path)
+            made_unreadable.append(full_path)
 
     # 4) Esegui normalmente
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # --- Ripristina i permessi per evitare problemi di cleanup ---
+    for path in made_unreadable:
+        try:
+            make_readable(path)
+        except Exception as e:
+            print(f"Warning: failed to restore permissions on {path}: {e}")
 
     # 5) Verifica
     if expected_error:
