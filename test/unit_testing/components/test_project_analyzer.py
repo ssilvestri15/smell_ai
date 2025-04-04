@@ -450,5 +450,5 @@ def test_analyze_project_empty_directory(
         "utils.file_utils.FileUtils.get_python_files", lambda _: []
     )
 
-    with pytest.raises(ValueError):  # O il tipo di eccezione effettiva sollevata
+    with pytest.raises(ValueError):
         project_analyzer.analyze_project("mock/project/path")

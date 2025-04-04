@@ -63,7 +63,9 @@ class ProjectAnalyzer:
 
         filenames = FileUtils.get_python_files(project_path)
         if not filenames:
-            raise ValueError(f"The project '{project_path}' contains no Python files.")
+            raise ValueError(f"The project '"
+                             f"{project_path}"
+                             f"' contains no Python files.")
         col = [
             "filename",
             "function_name",
