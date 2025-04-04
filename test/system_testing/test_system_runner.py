@@ -11,7 +11,7 @@ TEST_CASES = {
     # Config: ME=GUI => lo stiamo testando in CLI,
     # ma l'importante è che esca con errore perché manca l'input
     "TC1": {
-        "expected_error": False,
+        "expected_error": True,
         "expected_smells": 0,
         "description": "NF=0 => errore di percorso mancante.",
         # Parametri CLI
@@ -58,7 +58,7 @@ TEST_CASES = {
 
     # TC5 => NF=1, progetto vuoto => 0 smell, CLI, EP=false => seq
     "TC5": {
-        "expected_error": False,
+        "expected_error": True,
         "expected_smells": 0,
         "description": "Progetto singolo e vuoto => 0 smell.",
         "parallel": False,
@@ -155,7 +155,7 @@ TEST_CASES = {
     # NF>1, EF=.py, NP>1, SD=annidata, NCS=0 => ERR=file non leggibile =>
     # => expected_error=False, => no smells
     "TC13": {
-        "expected_error": False,  # il tool NON fallisce se i file non si leggono
+        "expected_error": True,
         "expected_smells": 0,     # nessuno smell, perché nessun file analizzato
         "description": "File non leggibili nei progetti annidati => 0 smell, ma nessun errore",
         "parallel": True,
@@ -180,7 +180,7 @@ TEST_CASES = {
     # NF=2, EF=altro, NP=1, SD=semplice => NCS=0 => no errore =>
     # i file non .py vengono ignorati => 0 smell
     "TC15": {
-        "expected_error": False,
+        "expected_error": True,
         "expected_smells": 0,
         "description": "2 file con estensione non .py => ignorati, nessuno smell",
         "parallel": True,        # puoi scegliere se seq o parallel

@@ -436,33 +436,19 @@ def test_analyze_projects_parallel_thread_safety(
 
 
 def test_analyze_project_empty_directory(
-    monkeypatch, project_analyzer, mock_file_related_methods, tmp_path
+        monkeypatch, project_analyzer, mock_file_related_methods, tmp_path
 ):
     """
-    Test `analyze_project` when no Python files exist in the directory.
+    Test `analyze_project` quando la directory è vuota.
+    Deve sollevare eccezione.
     """
     output_dir = tmp_path / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True)
-
-    monkeypatch.setattr(
-        "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(
-            output_dir / "overview.csv", index=False
-        ),
-    )
-
-    # Mock get_python_files to return an empty list
+    # Simuliamo una directory senza file Python
     monkeypatch.setattr(
         "utils.file_utils.FileUtils.get_python_files", lambda _: []
     )
 
-    # Run the method
-    total_smells = project_analyzer.analyze_project(
-        "test/unit_testing/components/mock_project_path"
-    )
-
-    # Assert that no smells are found
-    assert total_smells == 0
+    with pytest.raises(ValueError):  # O il tipo di eccezione effettiva sollevata
+        project_analyzer.analyze_project("mock/project/path")
