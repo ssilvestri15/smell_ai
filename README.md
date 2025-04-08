@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/matthew-2000/smell_ai/graph/badge.svg?token=KM7EH5L3XC)](https://codecov.io/gh/matthew-2000/smell_ai)
+
 <p align="center">
   <img src="./code_smile_logo.png" alt="CodeSmile" width="200"/>
 </p>
