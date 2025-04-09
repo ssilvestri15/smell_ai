@@ -1,0 +1,58 @@
+@startuml CallGraphWebApp
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam dpi 150
+title Call Graph WebApp
+
+' GATEWAY '
+rectangle "gateway" {
+  [main.py (gateway)]
+}
+
+' AI SERVICE '
+rectangle "aiservice" {
+  [main.py (AI Analysis Service)]
+  [detect_smell.py (Router)]
+  [model.py (Model Utility)]
+}
+
+' STATIC ANALYSIS SERVICE '
+rectangle "staticanalysis" {
+  [main.py (Static Analysis Service)]
+  [detect_smell.py (Router)]
+  [static_analysis.py (Static Analysis Utility)]
+}
+
+' REPORT SERVICE '
+rectangle "report" {
+  [main.py (Report Service)]
+  [report.py (Router)]
+  [report_generator.py (Report Utility)]
+}
+
+' CORE TOOL PACKAGE (dipendenza esterna alla webapp) '
+package "report (tool)" {
+  [report_generator.py (tool)]
+}
+
+' CHIAMATE DA GATEWAY AI SERVIZI '
+[main.py (gateway)] --> [main.py (AI Analysis Service)]
+[main.py (gateway)] --> [main.py (Static Analysis Service)]
+[main.py (gateway)] --> [main.py (Report Service)]
+
+' AI Analysis Service internals '
+[main.py (AI Analysis Service)] --> [detect_smell.py (Router)]
+[detect_smell.py (Router)] --> [model.py (Model Utility)]
+
+' Static Analysis Service internals '
+[main.py (Static Analysis Service)] --> [detect_smell.py (Router)]
+[detect_smell.py (Router)] --> [static_analysis.py (Static Analysis Utility)]
+
+' Report Service internals '
+[main.py (Report Service)] --> [report.py (Router)]
+[report.py (Router)] --> [report_generator.py (Report Utility)]
+
+' External core dependency '
+[report_generator.py (Report Utility)] --> [report_generator.py (tool)]
+
+@enduml
