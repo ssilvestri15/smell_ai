@@ -1,8 +1,10 @@
+import datetime
 import os
 import time
 import threading
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
+from git import Repo, NULL_TREE
 from components.inspector import Inspector
 from utils.file_utils import FileUtils
 from components.git_repo_inspector import GitRepoInspector
@@ -310,46 +312,65 @@ class ProjectAnalyzer:
         print(f"Total code smells found in all projects: {total_smells}\n")
 
     def analyze_recent_files(self, repo_path: str, commit_depth: int = 1) -> int:
-        """
-        Analyzes only recently modified Python files in the repository.
+        print(f"🔍 Quick Scan temporale attivo per: {repo_path}")
 
-        Parameters:
-        - repo_path (str): Local path to the repo.
-        - commit_depth (int): How many commits to consider (default: 1).
-
-        Returns:
-        - int: Total number of code smells found.
-        """
-        print(f"🔍 Quick Scan attivo per: {repo_path}")
-
-        py_files = self.git_inspector.get_recently_modified_files(repo_path, commit_depth)
-        if not py_files:
-            print("Nessun file Python modificato di recente trovato.")
-            return 0
+        repo = Repo(repo_path)
+        branch = "main" if "main" in repo.heads else "master"
+        commits = list(repo.iter_commits(branch, max_count=commit_depth))
 
         total_smells = 0
-        col = [
-            "filename",
-            "function_name",
-            "smell_name",
-            "line",
-            "description",
-            "additional_info",
-        ]
-        to_save = pd.DataFrame(columns=col)
+        all_results = []
 
-        for filename in py_files:
-            try:
-                result = self.inspector.inspect(filename)
-                smell_count = len(result)
-                total_smells += smell_count
-                if smell_count > 0:
-                    print(f"Found {smell_count} smells in {filename}")
-                to_save = pd.concat([to_save, result], ignore_index=True)
-            except Exception as e:
-                print(f"Errore durante l'analisi di {filename}: {e}")
+        for i, commit in enumerate(commits):
+            commit_hash = commit.hexsha
+            commit_date = datetime.datetime.fromtimestamp(commit.committed_date).isoformat()
+            commit_author = f"{commit.author.name} <{commit.author.email}>"
+            commit_msg = commit.message.strip()
 
-        self._save_results(to_save, "quickscan_results.csv")
+            # Recupera file modificati nel commit
+            if not commit.parents:
+                diffs = commit.diff(NULL_TREE)  # primo commit
+            else:
+                diffs = commit.diff(commit.parents[0])
+
+            modified_files = [
+                diff.a_path or diff.b_path
+                for diff in diffs
+                if (diff.a_path or diff.b_path).endswith(".py")
+            ]
+
+            for file_rel_path in modified_files:
+                abs_path = os.path.join(repo_path, file_rel_path)
+                if not os.path.isfile(abs_path):
+                    continue  # escludi file rimossi o spostati
+
+                try:
+                    result = self.inspector.inspect(abs_path)
+                    if result.empty:
+                        continue
+
+                    smell_count = len(result)
+                    total_smells += smell_count
+
+                    result["commit_index"] = i + 1
+                    result["commit_hash"] = commit_hash
+                    result["commit_date"] = commit_date
+                    result["commit_author"] = commit_author
+                    result["commit_msg"] = commit_msg
+                    result["relative_file"] = file_rel_path
+                    result["project_path"] = repo_path
+
+                    all_results.append(result)
+
+                    print(f"✅ [{commit_hash[:7]}] {file_rel_path}: {smell_count} smells")
+
+                except Exception as e:
+                    print(f"❌ Errore su {file_rel_path} @ {commit_hash[:7]}: {e}")
+
+        if all_results:
+            to_save = pd.concat(all_results, ignore_index=True)
+            self._save_results(to_save, "quickscan_results.csv")
+
         return total_smells
 
     def merge_all_results(self):

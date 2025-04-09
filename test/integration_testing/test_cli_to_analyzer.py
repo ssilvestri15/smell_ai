@@ -15,6 +15,8 @@ def test_cli_calls_project_analyzer(mock_analyzer):
         parallel=False,
         resume=False,
         multiple=False,
+        quick_scan=False,
+        commit_depth=1,
     )
 
     cli = CodeSmileCLI(args)

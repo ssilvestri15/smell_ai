@@ -49,6 +49,8 @@ def test_full_integration_with_cli(mock_rule_check, integration_setup):
         parallel=False,
         resume=False,
         multiple=False,
+        quick_scan=False,
+        commit_depth=1,
     )
 
     cli = CodeSmileCLI(args)

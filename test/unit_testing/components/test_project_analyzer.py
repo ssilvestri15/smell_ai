@@ -455,11 +455,13 @@ def test_analyze_project_empty_directory(
 
 def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
     """
-    Testa che `analyze_recent_files` analizzi solo i file Python modificati.
+    Testa che `analyze_recent_files` salvi informazioni estese
+    per ogni code smell (commit, file, autore, ecc).
     """
     output_dir = tmp_path / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Mock risultato dell'inspector
     def mock_inspect(file_path):
         if file_path.endswith(".py"):
             return pd.DataFrame({
@@ -470,25 +472,46 @@ def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
                 "description": ["desc"],
                 "additional_info": ["info"]
             })
-        return pd.DataFrame()  # Nessun risultato per i .txt
+        return pd.DataFrame()
 
     project_analyzer.inspector.inspect = MagicMock(side_effect=mock_inspect)
 
-    # Mock ritorno dei file modificati
-    project_analyzer.git_inspector.get_recently_modified_files = MagicMock(
-        return_value=["/fake/path/file1.py", "/fake/path/file2.txt"]
+    # Commit finto
+    mock_commit = MagicMock()
+    mock_commit.hexsha = "abc123"
+    mock_commit.committed_date = 1712689200
+    mock_commit.author.name = "Dev"
+    mock_commit.author.email = "dev@example.com"
+    mock_commit.message = "Fix bug"
+    mock_commit.parents = [MagicMock()]
+    mock_commit.diff.return_value = [
+        MagicMock(a_path="file1.py", b_path=None, new_file=False, deleted_file=False),
+        MagicMock(a_path="file2.txt", b_path=None, new_file=False, deleted_file=False),
+    ]
+
+    # Mocka os.path.isfile → solo i .py esistono
+    monkeypatch.setattr("os.path.isfile", lambda path: path.endswith(".py"))
+
+    # Mock Repo
+    monkeypatch.setattr(
+        "components.project_analyzer.Repo",
+        lambda repo_path: MagicMock(
+            iter_commits=MagicMock(return_value=[mock_commit]),
+            heads={"main": MagicMock()},
+            active_branch=MagicMock(name="main")
+        )
     )
 
+    # Mock salvataggio CSV
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
         lambda self, df, path: df.to_csv(output_dir / "quickscan.csv", index=False)
     )
 
-    # Esegui
-    total = project_analyzer.analyze_recent_files("/fake/repo", commit_depth=2)
+    total = project_analyzer.analyze_recent_files("/fake/repo", commit_depth=1)
 
-    # Verifica: ora solo 1 file produce uno smell
+    # Verifiche
     assert total == 1
-    project_analyzer.inspector.inspect.assert_any_call("/fake/path/file1.py")
-    project_analyzer.inspector.inspect.assert_any_call("/fake/path/file2.txt")
-    assert (output_dir / "quickscan.csv").exists()
+    df = pd.read_csv(output_dir / "quickscan.csv")
+    assert len(df) == 1
+    assert "commit_hash" in df.columns or "project_path" in df.columns  # opzionali

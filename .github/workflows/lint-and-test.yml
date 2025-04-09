@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-      - feature/oop-refactor
+      - CR1
+      - CR2
+      - CR3
   pull_request:
 
 jobs:
