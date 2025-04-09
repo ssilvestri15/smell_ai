@@ -20,7 +20,9 @@ class GitRepoInspector:
         Repo.clone_from(git_url, local_path)
         return local_path
 
-    def get_recently_modified_files(self, repo_path: str, commit_depth: int = 1) -> list:
+    def get_recently_modified_files(self,
+                                    repo_path: str,
+                                    commit_depth: int = 1) -> list:
         repo = Repo(repo_path)
         branch = "main" if "main" in repo.heads else "master"
         commits = list(repo.iter_commits(branch, max_count=commit_depth))
@@ -30,10 +32,8 @@ class GitRepoInspector:
                 diffs = commit.diff(commit.parents[0])
                 for diff in diffs:
                     path = diff.a_path or diff.b_path
-                    print(f"[DEBUG] Analizzando diff: {path}")  # Debug print
                     if path and path.endswith(".py"):
                         full_path = os.path.join(repo_path, path)
-                        print(f"[DEBUG] File Python modificato trovato: {full_path}")  # Debug print
                         modified_files.add(full_path)
 
         return list(modified_files)

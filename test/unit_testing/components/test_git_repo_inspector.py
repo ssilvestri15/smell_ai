@@ -32,8 +32,9 @@ def test_clone_repo_removes_existing_folder(tmp_path):
 
     inspector = GitRepoInspector(base_dir=str(base_dir))
 
-    with patch("components.git_repo_inspector.Repo.clone_from") as mock_clone, \
-            patch("shutil.rmtree") as mock_rmtree:
+    with (patch("components.git_repo_inspector.Repo.clone_from")
+          as mock_clone,
+            patch("shutil.rmtree") as mock_rmtree):
 
         url = "https://github.com/user/repo.git"
         inspector.clone_repo(url)
@@ -50,8 +51,14 @@ def test_get_recently_modified_files_returns_py_files(tmp_path):
     mock_commit = MagicMock()
     mock_commit.parents = [MagicMock()]
     mock_commit.diff.return_value = [
-        MagicMock(a_path="file1.py", b_path=None, new_file=True, deleted_file=False),
-        MagicMock(a_path="file2.txt", b_path=None, new_file=True, deleted_file=False),
+        MagicMock(a_path="file1.py",
+                  b_path=None,
+                  new_file=True,
+                  deleted_file=False),
+        MagicMock(a_path="file2.txt",
+                  b_path=None,
+                  new_file=True,
+                  deleted_file=False),
     ]
 
     mock_repo = MagicMock()
@@ -63,7 +70,9 @@ def test_get_recently_modified_files_returns_py_files(tmp_path):
         mock_repo_class.return_value = mock_repo
 
         inspector = GitRepoInspector()
-        modified = inspector.get_recently_modified_files(mock_repo_path, commit_depth=1)
+        modified = inspector.get_recently_modified_files(
+            mock_repo_path,
+            commit_depth=1)
 
         assert any(f.endswith(".py") for f in modified)
         assert not any(f.endswith(".txt") for f in modified)

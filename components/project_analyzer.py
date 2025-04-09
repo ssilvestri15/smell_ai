@@ -311,7 +311,9 @@ class ProjectAnalyzer:
         )
         print(f"Total code smells found in all projects: {total_smells}\n")
 
-    def analyze_recent_files(self, repo_path: str, commit_depth: int = 1) -> int:
+    def analyze_recent_files(self,
+                             repo_path: str,
+                             commit_depth: int = 1) -> int:
         print(f"🔍 Quick Scan temporale attivo per: {repo_path}")
 
         repo = Repo(repo_path)
@@ -323,7 +325,10 @@ class ProjectAnalyzer:
 
         for i, commit in enumerate(commits):
             commit_hash = commit.hexsha
-            commit_date = datetime.datetime.fromtimestamp(commit.committed_date).isoformat()
+            commit_date = (datetime
+                           .datetime
+                           .fromtimestamp(commit.committed_date)
+                           .isoformat())
             commit_author = f"{commit.author.name} <{commit.author.email}>"
             commit_msg = commit.message.strip()
 
@@ -362,10 +367,14 @@ class ProjectAnalyzer:
 
                     all_results.append(result)
 
-                    print(f"✅ [{commit_hash[:7]}] {file_rel_path}: {smell_count} smells")
+                    print(f"✅ [{commit_hash[:7]}] "
+                          f"{file_rel_path}: "
+                          f"{smell_count} smells")
 
                 except Exception as e:
-                    print(f"❌ Errore su {file_rel_path} @ {commit_hash[:7]}: {e}")
+                    print(f"❌ Errore su "
+                          f"{file_rel_path} @ "
+                          f"{commit_hash[:7]}: {e}")
 
         if all_results:
             to_save = pd.concat(all_results, ignore_index=True)

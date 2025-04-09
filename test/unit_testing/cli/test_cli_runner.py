@@ -269,6 +269,7 @@ def test_execute_with_invalid_max_walkers_and_parallel(mock_analyzer):
     ):
         cli.execute()
 
+
 def test_execute_with_quick_scan(mock_analyzer):
     args = MagicMock()
     args.input = "mock_input"
@@ -280,7 +281,7 @@ def test_execute_with_quick_scan(mock_analyzer):
     args.quick_scan = True
     args.commit_depth = 3
 
-    mock_analyzer.analyze_recent_files.return_value = 4  # Simula 4 code smells trovati
+    mock_analyzer.analyze_recent_files.return_value = 4
     mock_analyzer.clean_output_directory = MagicMock()
 
     cli = CodeSmileCLI(args)
@@ -289,7 +290,9 @@ def test_execute_with_quick_scan(mock_analyzer):
     with patch("builtins.print") as mock_print:
         cli.execute()
 
-        mock_analyzer.analyze_recent_files.assert_called_once_with("mock_input", commit_depth=3)
+        mock_analyzer.analyze_recent_files.assert_called_once_with(
+            "mock_input",
+            commit_depth=3)
         mock_print.assert_any_call("Quick Scan: 4 code smells trovati.")
         mock_analyzer.analyze_project.assert_not_called()
         mock_analyzer.analyze_projects_parallel.assert_not_called()

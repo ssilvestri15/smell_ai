@@ -61,7 +61,10 @@ class ProjectRepositoryCloner:
             try:
                 full_url = f"https://github.com/{repo_url}.git"
                 local_path = self.git_inspector.clone_repo(full_url)
-                modified_files = self.git_inspector.get_recently_modified_files(local_path, commit_depth)
+                modified_files = (self.git_inspector
+                                  .get_recently_modified_files(
+                                    local_path,
+                                    commit_depth))
                 result[repo_url] = modified_files
             except Exception as e:
                 print(f"Errore con {repo_url}: {e}")

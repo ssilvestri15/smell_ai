@@ -453,6 +453,7 @@ def test_analyze_project_empty_directory(
     with pytest.raises(ValueError):
         project_analyzer.analyze_project("mock/project/path")
 
+
 def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
     """
     Testa che `analyze_recent_files` salvi informazioni estese
@@ -485,8 +486,14 @@ def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
     mock_commit.message = "Fix bug"
     mock_commit.parents = [MagicMock()]
     mock_commit.diff.return_value = [
-        MagicMock(a_path="file1.py", b_path=None, new_file=False, deleted_file=False),
-        MagicMock(a_path="file2.txt", b_path=None, new_file=False, deleted_file=False),
+        MagicMock(a_path="file1.py",
+                  b_path=None,
+                  new_file=False,
+                  deleted_file=False),
+        MagicMock(a_path="file2.txt",
+                  b_path=None,
+                  new_file=False,
+                  deleted_file=False),
     ]
 
     # Mocka os.path.isfile → solo i .py esistono
@@ -505,13 +512,15 @@ def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
     # Mock salvataggio CSV
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(output_dir / "quickscan.csv", index=False)
+        lambda self, df, path: df.to_csv(output_dir / "quickscan.csv",
+                                         index=False)
     )
 
-    total = project_analyzer.analyze_recent_files("/fake/repo", commit_depth=1)
+    total = project_analyzer.analyze_recent_files("/fake/repo",
+                                                  commit_depth=1)
 
     # Verifiche
     assert total == 1
     df = pd.read_csv(output_dir / "quickscan.csv")
     assert len(df) == 1
-    assert "commit_hash" in df.columns or "project_path" in df.columns  # opzionali
+    assert "commit_hash" in df.columns or "project_path" in df.columns

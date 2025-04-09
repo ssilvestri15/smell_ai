@@ -50,7 +50,9 @@ class CodeSmileCLI:
             self.analyzer.clean_output_directory()
 
         if self.args.quick_scan:
-            total = self.analyzer.analyze_recent_files(self.args.input, commit_depth=self.args.commit_depth)
+            total = self.analyzer.analyze_recent_files(
+                self.args.input,
+                commit_depth=self.args.commit_depth)
             print(f"Quick Scan: {total} code smells trovati.")
             return
 
