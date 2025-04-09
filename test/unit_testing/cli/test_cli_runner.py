@@ -19,6 +19,7 @@ def test_execute_with_valid_arguments(mock_analyzer):
     args.resume = False
     args.multiple = False
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_project.return_value = (
@@ -50,6 +51,7 @@ def test_execute_with_missing_arguments():
     args.resume = False
     args.multiple = False
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Initialize the CLI with mocked arguments
     cli = CodeSmileCLI(args)
@@ -74,6 +76,7 @@ def test_execute_with_invalid_max_walkers(mock_analyzer):
     args.max_walkers = -1  # Invalid max_walkers
     args.resume = False
     args.multiple = True
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_projects_parallel = MagicMock()
@@ -97,6 +100,7 @@ def test_execute_with_parallel_execution(mock_analyzer):
     args.resume = False
     args.multiple = True
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_projects_parallel.return_value = (
@@ -129,6 +133,7 @@ def test_execute_with_sequential_execution(mock_analyzer):
     args.resume = False
     args.multiple = False
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_project.return_value = (
@@ -158,6 +163,7 @@ def test_execute_with_resume(mock_analyzer):
     args.resume = True
     args.multiple = False
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_project.return_value = 2
@@ -186,6 +192,7 @@ def test_print_configuration(mock_analyzer):
     args.resume = False
     args.multiple = False
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_project.return_value = 2
@@ -219,6 +226,7 @@ def test_execute_with_resume_and_multiple_projects(mock_analyzer):
     args.resume = True  # Resume execution
     args.multiple = True  # Multiple projects flag set
     args.max_walkers = 5
+    args.quick_scan = False
 
     # Mock the methods of ProjectAnalyzer
     mock_analyzer.analyze_projects_parallel.return_value = (
@@ -250,6 +258,7 @@ def test_execute_with_invalid_max_walkers_and_parallel(mock_analyzer):
     args.max_walkers = 0  # Invalid max_walkers
     args.resume = False
     args.multiple = False
+    args.quick_scan = False
 
     # Initialize the CLI with mocked arguments and analyzer
     cli = CodeSmileCLI(args)
@@ -259,3 +268,28 @@ def test_execute_with_invalid_max_walkers_and_parallel(mock_analyzer):
         ValueError, match="max_walkers must be greater than 0."
     ):
         cli.execute()
+
+def test_execute_with_quick_scan(mock_analyzer):
+    args = MagicMock()
+    args.input = "mock_input"
+    args.output = "mock_output"
+    args.parallel = False
+    args.resume = False
+    args.multiple = False
+    args.max_walkers = 5
+    args.quick_scan = True
+    args.commit_depth = 3
+
+    mock_analyzer.analyze_recent_files.return_value = 4  # Simula 4 code smells trovati
+    mock_analyzer.clean_output_directory = MagicMock()
+
+    cli = CodeSmileCLI(args)
+    cli.analyzer = mock_analyzer
+
+    with patch("builtins.print") as mock_print:
+        cli.execute()
+
+        mock_analyzer.analyze_recent_files.assert_called_once_with("mock_input", commit_depth=3)
+        mock_print.assert_any_call("Quick Scan: 4 code smells trovati.")
+        mock_analyzer.analyze_project.assert_not_called()
+        mock_analyzer.analyze_projects_parallel.assert_not_called()

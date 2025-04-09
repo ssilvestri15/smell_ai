@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from git_repo_inspector import GitRepoInspector
 
 
 class ProjectRepositoryCloner:
@@ -24,6 +25,7 @@ class ProjectRepositoryCloner:
         """
         self.base_path = base_path
         self.repo_data_path = repo_data_path
+        self.git_inspector = GitRepoInspector(base_dir=base_path)
 
     def get_repo(self, repo_url: str):
         """
@@ -37,13 +39,34 @@ class ProjectRepositoryCloner:
         Returns:
         - None
         """
-        folder_url = repo_url.replace("/", "")
-        build_path = os.path.join(self.base_path, folder_url)
-        build_path = os.path.abspath(build_path)
+        full_url = f"https://github.com/{repo_url}.git"
+        self.git_inspector.clone_repo(full_url)
 
-        if not os.path.exists(build_path):
-            os.mkdir(build_path)
-        os.system(f"git clone https://github.com/{repo_url} {build_path}")
+    def get_debug_quick_scan_files(self, commit_depth: int = 1) -> dict:
+        """
+        Clona solo un piccolo insieme di repository leggeri (debug)
+        e restituisce i file Python modificati di recente.
+
+        Parameters:
+        - commit_depth (int): Numero di commit recenti da analizzare.
+
+        Returns:
+        - dict: {repo_url: [list of modified .py files]}
+        """
+        df = pd.read_csv(self.repo_data_path)
+        df = self.filter_repos(df)
+        df = self.debug_filter_repo(df)  # seleziona solo i più piccoli
+        result = {}
+        for repo_url in df["GitHub_Repo"]:
+            try:
+                full_url = f"https://github.com/{repo_url}.git"
+                local_path = self.git_inspector.clone_repo(full_url)
+                modified_files = self.git_inspector.get_recently_modified_files(local_path, commit_depth)
+                result[repo_url] = modified_files
+            except Exception as e:
+                print(f"Errore con {repo_url}: {e}")
+
+        return result
 
     def filter_repos(
         self, df: pd.DataFrame, stars: int = 200, commits: int = 100

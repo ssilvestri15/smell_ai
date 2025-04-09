@@ -452,3 +452,43 @@ def test_analyze_project_empty_directory(
 
     with pytest.raises(ValueError):
         project_analyzer.analyze_project("mock/project/path")
+
+def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
+    """
+    Testa che `analyze_recent_files` analizzi solo i file Python modificati.
+    """
+    output_dir = tmp_path / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def mock_inspect(file_path):
+        if file_path.endswith(".py"):
+            return pd.DataFrame({
+                "filename": [file_path],
+                "function_name": ["f"],
+                "smell_name": ["bad"],
+                "line": [1],
+                "description": ["desc"],
+                "additional_info": ["info"]
+            })
+        return pd.DataFrame()  # Nessun risultato per i .txt
+
+    project_analyzer.inspector.inspect = MagicMock(side_effect=mock_inspect)
+
+    # Mock ritorno dei file modificati
+    project_analyzer.git_inspector.get_recently_modified_files = MagicMock(
+        return_value=["/fake/path/file1.py", "/fake/path/file2.txt"]
+    )
+
+    monkeypatch.setattr(
+        "components.project_analyzer.ProjectAnalyzer._save_results",
+        lambda self, df, path: df.to_csv(output_dir / "quickscan.csv", index=False)
+    )
+
+    # Esegui
+    total = project_analyzer.analyze_recent_files("/fake/repo", commit_depth=2)
+
+    # Verifica: ora solo 1 file produce uno smell
+    assert total == 1
+    project_analyzer.inspector.inspect.assert_any_call("/fake/path/file1.py")
+    project_analyzer.inspector.inspect.assert_any_call("/fake/path/file2.txt")
+    assert (output_dir / "quickscan.csv").exists()

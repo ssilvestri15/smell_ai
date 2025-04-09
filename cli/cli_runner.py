@@ -49,6 +49,11 @@ class CodeSmileCLI:
         if not self.args.resume:
             self.analyzer.clean_output_directory()
 
+        if self.args.quick_scan:
+            total = self.analyzer.analyze_recent_files(self.args.input, commit_depth=self.args.commit_depth)
+            print(f"Quick Scan: {total} code smells trovati.")
+            return
+
         if self.args.multiple:
             if self.args.parallel:
                 self.analyzer.analyze_projects_parallel(
@@ -101,6 +106,19 @@ def main():
         "--multiple",
         action="store_true",
         help="Analyze multiple projects (default: False)",
+    )
+
+    parser.add_argument(
+        "--quick-scan",
+        action="store_true",
+        help="Analyze only recently modified files using Git (default: False)",
+    )
+
+    parser.add_argument(
+        "--commit-depth",
+        type=int,
+        default=1,
+        help="Number of recent commits to consider for quick scan (default: 1)"
     )
 
     # Parse arguments

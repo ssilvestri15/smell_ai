@@ -5,6 +5,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from components.inspector import Inspector
 from utils.file_utils import FileUtils
+from components.git_repo_inspector import GitRepoInspector
 
 
 class ProjectAnalyzer:
@@ -26,6 +27,7 @@ class ProjectAnalyzer:
         FileUtils.clean_directory(self.base_output_path, "output")
 
         self.inspector = Inspector(self.output_path)
+        self.git_inspector = GitRepoInspector()
 
     def clean_output_directory(self):
         """
@@ -306,6 +308,49 @@ class ProjectAnalyzer:
             f"{time.time() - start_time:.2f} seconds."
         )
         print(f"Total code smells found in all projects: {total_smells}\n")
+
+    def analyze_recent_files(self, repo_path: str, commit_depth: int = 1) -> int:
+        """
+        Analyzes only recently modified Python files in the repository.
+
+        Parameters:
+        - repo_path (str): Local path to the repo.
+        - commit_depth (int): How many commits to consider (default: 1).
+
+        Returns:
+        - int: Total number of code smells found.
+        """
+        print(f"🔍 Quick Scan attivo per: {repo_path}")
+
+        py_files = self.git_inspector.get_recently_modified_files(repo_path, commit_depth)
+        if not py_files:
+            print("Nessun file Python modificato di recente trovato.")
+            return 0
+
+        total_smells = 0
+        col = [
+            "filename",
+            "function_name",
+            "smell_name",
+            "line",
+            "description",
+            "additional_info",
+        ]
+        to_save = pd.DataFrame(columns=col)
+
+        for filename in py_files:
+            try:
+                result = self.inspector.inspect(filename)
+                smell_count = len(result)
+                total_smells += smell_count
+                if smell_count > 0:
+                    print(f"Found {smell_count} smells in {filename}")
+                to_save = pd.concat([to_save, result], ignore_index=True)
+            except Exception as e:
+                print(f"Errore durante l'analisi di {filename}: {e}")
+
+        self._save_results(to_save, "quickscan_results.csv")
+        return total_smells
 
     def merge_all_results(self):
         """
