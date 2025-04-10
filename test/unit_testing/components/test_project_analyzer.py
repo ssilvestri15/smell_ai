@@ -59,8 +59,8 @@ def test_analyze_project(
 
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(
-            output_dir / "overview.csv", index=False
+        lambda self, df, filename, subdir=None: df.to_csv(
+            output_dir / filename, index=False
         ),
     )
 
@@ -128,8 +128,8 @@ def test_analyze_projects_sequential(
 
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(
-            output_dir / "overview.csv", index=False
+        lambda self, df, filename, subdir=None: df.to_csv(
+            output_dir / filename, index=False
         ),
     )
 
@@ -233,7 +233,7 @@ def test_analyze_projects_parallel(
     # Mock save results method
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: None,  # Do nothing on saving results
+        lambda self, df, filename, subdir=None: None,
     )
 
     # Mock ThreadPoolExecutor to avoid threading and run tasks synchronously
@@ -303,8 +303,8 @@ def test_analyze_project_with_errors(
 
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(
-            output_dir / "overview.csv", index=False
+        lambda self, df, filename, subdir=None: df.to_csv(
+            output_dir / filename, index=False
         ),
     )
 
@@ -342,11 +342,17 @@ def test_analyze_projects_sequential_save_results(
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
 
+    def save_results(self, df, filename, subdir=None):
+        path = output_dir / subdir / filename \
+            if subdir \
+            else output_dir / filename
+        if subdir:
+            (output_dir / subdir).mkdir(parents=True, exist_ok=True)
+        df.to_csv(path, index=False)
+
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(
-            output_dir / "overview.csv", index=False
-        ),
+        save_results,
     )
 
     # Mock the inspector's inspect method
@@ -510,10 +516,17 @@ def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
     )
 
     # Mock salvataggio CSV
+    def save_results(self, df, filename, subdir=None):
+        path = output_dir / subdir / filename \
+            if subdir \
+            else output_dir / filename
+        if subdir:
+            (output_dir / subdir).mkdir(parents=True, exist_ok=True)
+        df.to_csv(path, index=False)
+
     monkeypatch.setattr(
         "components.project_analyzer.ProjectAnalyzer._save_results",
-        lambda self, df, path: df.to_csv(output_dir / "quickscan.csv",
-                                         index=False)
+        save_results,
     )
 
     total = project_analyzer.analyze_recent_files("/fake/repo",
@@ -521,6 +534,6 @@ def test_analyze_recent_files(monkeypatch, project_analyzer, tmp_path):
 
     # Verifiche
     assert total == 1
-    df = pd.read_csv(output_dir / "quickscan.csv")
+    df = pd.read_csv(output_dir / "project_details" / "quickscan_results.csv")
     assert len(df) == 1
     assert "commit_hash" in df.columns or "project_path" in df.columns

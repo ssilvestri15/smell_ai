@@ -37,17 +37,30 @@ class ProjectAnalyzer:
         """
         FileUtils.clean_directory(self.base_output_path, "output")
 
-    def _save_results(self, df: pd.DataFrame, filename: str):
+    def _save_results(
+            self,
+            df: pd.DataFrame,
+            filename: str,
+            subdir: str = None):
         """
         Saves the DataFrame to a CSV file in the output root folder.
+
+        Parameters:
+        - df (pd.DataFrame): DataFrame to save.
+        - filename (str): Name of the file to save.
+        - subdir (str): Subdirectory where the file will be saved.
         """
         if df.empty:
             print(f"No results to save for {filename}")
             return
 
-        os.makedirs(self.output_path, exist_ok=True)
+        if subdir:
+            os.makedirs(os.path.join(self.output_path, subdir), exist_ok=True)
+            file_path = os.path.join(self.output_path, subdir, filename)
+        else:
+            os.makedirs(self.output_path, exist_ok=True)
+            file_path = os.path.join(self.output_path, filename)
 
-        file_path = os.path.join(self.output_path, filename)
         df.to_csv(file_path, index=False)
         print(f"Results saved to {file_path}")
 
@@ -101,6 +114,10 @@ class ProjectAnalyzer:
                 continue
 
         self._save_results(to_save, "overview.csv")
+        self._save_results(
+            to_save,
+            f"{project_name}_results.csv",
+            subdir="project_details")
 
         print(f"Finished analysis for project: {project_name}")
         print(
@@ -187,15 +204,10 @@ class ProjectAnalyzer:
                         continue
 
                 if not to_save.empty:
-                    details_path = os.path.join(
-                        self.output_path, "project_details"
-                    )
-                    os.makedirs(details_path, exist_ok=True)
-                    detailed_file_path = os.path.join(
-                        details_path, f"{dirname}_results.csv"
-                    )
-                    to_save.to_csv(detailed_file_path, index=False)
-                    print(f"Detailed results saved to {detailed_file_path}")
+                    self._save_results(
+                        to_save,
+                        f"{dirname}_results.csv",
+                        subdir="project_details")
 
                 total_smells += project_smells
                 print(
@@ -207,6 +219,8 @@ class ProjectAnalyzer:
 
             except Exception as e:
                 print(f"Error analyzing project '{dirname}': {str(e)}\n")
+
+        self.merge_all_results()
 
         print(
             "Sequential execution completed in "
@@ -281,15 +295,10 @@ class ProjectAnalyzer:
                         continue
 
                 if not to_save.empty:
-                    details_path = os.path.join(
-                        self.output_path, "project_details"
-                    )
-                    os.makedirs(details_path, exist_ok=True)
-                    detailed_file_path = os.path.join(
-                        details_path, f"{dirname}_results.csv"
-                    )
-                    to_save.to_csv(detailed_file_path, index=False)
-                    print(f"Detailed results saved to {detailed_file_path}")
+                    self._save_results(
+                        to_save,
+                        f"{dirname}_results.csv",
+                        subdir="project_details")
 
                 total_smells += project_smells
 
@@ -304,6 +313,8 @@ class ProjectAnalyzer:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for dirname in os.listdir(base_path):
                 executor.submit(analyze_and_count_smells, dirname)
+
+        self.merge_all_results()
 
         print(
             "Parallel execution completed in "
@@ -378,7 +389,12 @@ class ProjectAnalyzer:
 
         if all_results:
             to_save = pd.concat(all_results, ignore_index=True)
-            self._save_results(to_save, "quickscan_results.csv")
+            self._save_results(
+                to_save,
+                "quickscan_results.csv",
+                subdir="project_details")
+
+        self.merge_all_results()
 
         return total_smells
 

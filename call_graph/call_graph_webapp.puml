@@ -19,7 +19,7 @@ rectangle "aiservice" {
 ' STATIC ANALYSIS SERVICE '
 rectangle "staticanalysis" {
   [main.py (Static Analysis Service)]
-  [detect_smell.py (Router)]
+  [detect_smell.py (Router - Static)]
   [static_analysis.py (Static Analysis Utility)]
 }
 
@@ -28,11 +28,6 @@ rectangle "report" {
   [main.py (Report Service)]
   [report.py (Router)]
   [report_generator.py (Report Utility)]
-}
-
-' CORE TOOL PACKAGE (dipendenza esterna alla webapp) '
-package "report (tool)" {
-  [report_generator.py (tool)]
 }
 
 ' CHIAMATE DA GATEWAY AI SERVIZI '
@@ -45,14 +40,11 @@ package "report (tool)" {
 [detect_smell.py (Router)] --> [model.py (Model Utility)]
 
 ' Static Analysis Service internals '
-[main.py (Static Analysis Service)] --> [detect_smell.py (Router)]
-[detect_smell.py (Router)] --> [static_analysis.py (Static Analysis Utility)]
+[main.py (Static Analysis Service)] --> [detect_smell.py (Router - Static)]
+[detect_smell.py (Router - Static)] --> [static_analysis.py (Static Analysis Utility)]
 
 ' Report Service internals '
 [main.py (Report Service)] --> [report.py (Router)]
 [report.py (Router)] --> [report_generator.py (Report Utility)]
-
-' External core dependency '
-[report_generator.py (Report Utility)] --> [report_generator.py (tool)]
 
 @enduml
