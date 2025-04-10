@@ -1,0 +1,99 @@
+name: "Code Smell Analyzer"
+description: "Analizza i code smell nei file modificati e apre issue se ne trova"
+author: "Simone Silvestri"
+inputs:
+  quick-scan:
+    description: "Esegui scansione rapida"
+    required: false
+    default: "true"
+  commit-depth:
+    description: "Profondità commit"
+    required: false
+    default: "1"
+outputs:
+  smells:
+    description: "Lista di code smell trovati"
+    value: ${{ steps.smell-analyzer.outputs.smells }}
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+      shell: bash
+    - name: Run analyzer
+      id: smell-analyzer
+      run: |
+        mkdir -p /smell_ai_output
+        INPUT_DIR="."
+        OUTPUT_DIR="/smell_ai_output"
+        MAX_WALKERS="4"
+        PARALLEL="true"
+        COMMIT_DEPTH="${{ inputs.commit-depth }}"
+        QUICKSCAN="${{ inputs.quick-scan }}"
+        # Costruzione comando
+        COMMAND="python -m cli.cli_runner --input $INPUT_DIR --output $OUTPUT_DIR"
+        [ -n "$MAX_WALKERS" ] && COMMAND="$COMMAND --max_walkers $MAX_WALKERS"
+        [ "$PARALLEL" == "true" ] && COMMAND="$COMMAND --parallel"
+        [ "$QUICKSCAN" == "true" ] && COMMAND="$COMMAND --quick-scan"
+        [ -n "$COMMIT_DEPTH" ] && COMMAND="$COMMAND --commit-depth $COMMIT_DEPTH"
+        echo "Running: $COMMAND"
+        $COMMAND
+        if [ -s "$OUTPUT_DIR/output/overview.csv" ]; then
+          echo "⚠️ Code smells found:"
+          cat "$OUTPUT_DIR/output/overview.csv"
+          echo "smells<<EOF" >> $GITHUB_OUTPUT
+          cat "$OUTPUT_DIR/output/overview.csv" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "No code smells found."
+          echo "smells=" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+    - name: Create GitHub Issue if smells found
+      if: steps.smell-analyzer.outputs.smells != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const smellsRaw = `${{ steps.smell-analyzer.outputs.smells }}`.trim();
+          const rows = smellsRaw.split('\n').map(r => r.trim()).filter(r => r);
+          const headers = rows[0].split(',').map(h => h.trim());
+
+          // Selezioniamo le colonne rilevanti
+          const relevantHeaders = ['filename', 'smell_name', 'line', 'commit_hash'];
+          const headerIndexes = headers.map((h, i) => relevantHeaders.includes(h) ? i : -1).filter(i => i !== -1);
+
+          // Recuperiamo la data e l'hash del commit
+          const commitDate = new Date().toLocaleDateString('en-US');
+          const commitHash = rows[1]?.split(',')[headers.indexOf('commit_hash')] || 'N/A';
+
+          let mdTable = `\n### 📊 Summary\n`;
+          mdTable += `- Total code smells detected: ${rows.length - 1}\n`;
+          mdTable += `- Analysis date: ${commitDate}\n\n`;
+          mdTable += `> ⚠️ It is recommended to review the indicated files to improve code quality.\n\n`;
+
+          // Creiamo la tabella
+          mdTable += '| ' + relevantHeaders.join(' | ') + ' |\n';
+          mdTable += '| ' + relevantHeaders.map(() => '---').join(' | ') + ' |\n';
+
+          // Aggiungiamo le righe dei dati
+          for (let i = 1; i < rows.length; i++) {
+            const cells = rows[i].split(',').map(c => c.trim());
+            const filteredCells = headerIndexes.map(j => cells[j] || '');
+            mdTable += '| ' + filteredCells.join(' | ') + ' |\n';
+          }
+
+          // Crea il titolo dell'issue con data e commit hash
+          const issueTitle = `🚨[SMELL AI] [${commitDate} - ${commitHash.substring(0, 7)}] - Code smells detected in modified files`;
+
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: issueTitle,
+            body: mdTable
+          });
