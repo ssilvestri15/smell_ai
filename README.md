@@ -173,6 +173,46 @@ For detailed instructions and further information, visit: **[this link](https://
 
 ---
 
+# Smell AI GitHub Action
+
+This repository provides a public GitHub Action that integrates **Smell AI** with Static Code Analysis. It automatically detects potential issues and creates GitHub Issues for review.
+
+## How to Integrate the Action
+
+1. **Add the Action to Your Workflow**
+
+   Create a `.github/workflows/smell_ai.yml` file with the following content:
+
+   ```yaml
+   name: Smell AI Analysis
+
+   jobs:
+    analyze-smells:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Run smell_ai Action
+        - uses: actions/checkout@v4
+        - uses: matthew-2000/smell_ai@main  # ← Important!
+          with:
+            quickscan: true           # Run quick scan, analyzes only modified files
+            commit-depth: 1           # Limit the number of commits to analyze
+   ```
+
+2. **Action Configuration Options**
+
+   - `quickscan` (default: `true`):
+    - `true`: Runs a quick scan of modified `.py` files, analyzing only the files edited in the last `commit-depth` number of commits.
+    - `false`: Analyzes all `.py` files in the project.
+   - `commit-depth` (default: `1`): Depth of commits to analyze.
+
+3. **Issue Creation**
+
+   If code smells are detected, an issue will be created with:
+   - A summary of detected smells.
+   - A markdown table with details on the affected files and lines.
+
+---
+
 ## Acknowledgments
 This project builds on the research presented in:
 **"When Code Smells Meet ML: On the Lifecycle of ML-Specific Code Smells in ML-Enabled Systems"**

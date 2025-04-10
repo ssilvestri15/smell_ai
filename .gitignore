@@ -1,9 +1,11 @@
 /input/projects/
 /datasets/raw/
 /env/
+.venv/
 .env
 .vscode
 .next
+.github/workflows/test-action.yml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
