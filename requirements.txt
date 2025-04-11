@@ -20,5 +20,5 @@ gitpython
 bitsandbytes
 accelerate>=0.26.0
 ollama
-
+tabulate
 
