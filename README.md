@@ -173,24 +173,24 @@ For detailed instructions and further information, visit: **[this link](https://
 
 ---
 
-# Smell AI GitHub Action
+# CodeSmile GitHub Action
 
-This repository provides a public GitHub Action that integrates **Smell AI** with Static Code Analysis. It automatically detects potential issues and creates GitHub Issues for review.
+This repository provides a public GitHub Action that integrates **CodeSmile**. It automatically detects potential issues and creates GitHub Issues for review.
 
 ## How to Integrate the Action
 
 1. **Add the Action to Your Workflow**
 
-   Create a `.github/workflows/smell_ai.yml` file with the following content:
+   Create a `.github/workflows/code_smile.yml` file with the following content:
 
    ```yaml
-   name: Smell AI Analysis
+   name: CodeSmile Analysis
 
    jobs:
     analyze-smells:
       runs-on: ubuntu-latest
       steps:
-        - name: Run smell_ai Action
+        - name: Run CodeSmile Action
         - uses: actions/checkout@v4
         - uses: matthew-2000/smell_ai@main  # ← Important!
           with:
