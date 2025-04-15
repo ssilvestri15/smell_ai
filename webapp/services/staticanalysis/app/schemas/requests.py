@@ -9,11 +9,11 @@ class DetectSmellRequest(BaseModel):
     file_name: str
     code_snippet: str
 
-    class Config :
+    class Config:
         schema_extra = {
             "example": {
                 "file_name": "example.py",
-                "code_snippet": """ 
+                "code_snippet": """
                 def example_function():
                     # This is an example function
                     x = 1

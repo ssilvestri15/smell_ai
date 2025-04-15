@@ -19,7 +19,7 @@ def generate_report_data(projects: list) -> dict:
                 combined_smells.append(
                     {
                         "smell_name": smell.smell_name,
-                        "filename": smell.file_name,  # ← usa direttamente il campo dello smell
+                        "filename": smell.file_name,
                     }
                 )
 
