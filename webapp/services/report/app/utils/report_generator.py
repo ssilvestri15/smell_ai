@@ -14,13 +14,12 @@ def generate_report_data(projects: list) -> dict:
     for project in projects:
         project_data = project.data
 
-        # Add smells from the project to the combined list
-        for smell, file in zip(project_data.smells, project_data.files):
+        for smell in project_data.smells:
             if smell:
                 combined_smells.append(
                     {
                         "smell_name": smell.smell_name,
-                        "filename": file.name,
+                        "filename": smell.file_name,  # ← usa direttamente il campo dello smell
                     }
                 )
 

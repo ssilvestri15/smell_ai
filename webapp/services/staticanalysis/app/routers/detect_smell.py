@@ -28,7 +28,8 @@ router = APIRouter()
 @router.post("/detect_smell_static", response_model=DetectSmellStaticResponse)
 async def detect_smell_static(payload: DetectSmellRequest):
     code_snippet = payload.code_snippet
-    analysis_result = detect_static(code_snippet)
+    file_name = payload.file_name
+    analysis_result = detect_static(file_name, code_snippet)
     return DetectSmellStaticResponse(
         success=analysis_result["success"], smells=analysis_result["response"]
     )

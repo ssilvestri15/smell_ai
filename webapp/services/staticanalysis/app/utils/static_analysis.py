@@ -11,7 +11,7 @@ OUTPUT_DIR = "output"
 inspector = Inspector(output_path=OUTPUT_DIR)
 
 
-def detect_static(code_snippet: str) -> dict:
+def detect_static(file_name: str, code_snippet: str) -> dict:
     try:
         # Create a temporary file to analyze the code snippet
         with tempfile.NamedTemporaryFile(
@@ -30,6 +30,7 @@ def detect_static(code_snippet: str) -> dict:
         smells = [
             Smell(
                 function_name=row["function_name"],
+                file_name=file_name,
                 line=row["line"],
                 smell_name=row["smell_name"],
                 description=row["description"],

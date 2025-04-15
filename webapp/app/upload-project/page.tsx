@@ -60,7 +60,7 @@ const UploadProjectPage = () => {
           const result =
             analysisMode === "AI"
               ? await detectAi(snippet.content)
-              : await detectStatic(snippet.content);
+              : await detectStatic(snippet.file.name, snippet.content);
 
           if (result?.success === false) {
             toast.error(
@@ -128,9 +128,10 @@ const UploadProjectPage = () => {
         const fileName = projectFiles[fileIndex].name;
         const smells = Array.isArray(res.smells) ? res.smells : [];
         return `File: ${fileName}\n` + smells
-          .map((smell: { function_name: any; line: any; smell_name: any; description: any; additional_info: any; }) => {
+          .map((smell: { function_name: any; file_name: any; line: any; smell_name: any; description: any; additional_info: any; }) => {
             let result = "";
             if (smell.function_name) result += `Function: ${smell.function_name}\n`;
+            if (smell.file_name) result += `File: ${smell.file_name}\n`;
             if (smell.line) result += `Line: ${smell.line}\n`;
             if (smell.smell_name) result += `Smell: ${smell.smell_name}\n`;
             if (smell.description) result += `Description: ${smell.description}\n`;

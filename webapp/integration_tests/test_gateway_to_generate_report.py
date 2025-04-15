@@ -27,6 +27,7 @@ def test_generate_report_valid_data():
                     "smells": [
                         {
                             "function_name": "function",
+                            "file_name": "1.py",
                             "line": 5,
                             "smell_name": "Unnecessary DataFrame Operation",
                             "description": "Avoid unnecessary operations on DataFrames.",

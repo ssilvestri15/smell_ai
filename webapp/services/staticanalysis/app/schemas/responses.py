@@ -8,6 +8,7 @@ class Smell(BaseModel):
     """
 
     function_name: str
+    file_name: str
     line: int
     smell_name: str
     description: str
@@ -28,6 +29,7 @@ class DetectSmellStaticResponse(BaseModel):
                 "smells": [
                     {
                         "function_name": "example_function",
+                        "file_name": "example.py",
                         "smell_name": "Unnecessary DataFrame Operation",
                         "line": 2,
                         "description":

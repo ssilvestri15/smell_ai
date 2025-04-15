@@ -1,5 +1,6 @@
 export type ContextSmell = {
   function_name: string;
+  file_name: string;
   line: number;
   smell_name: string;
   description: string;

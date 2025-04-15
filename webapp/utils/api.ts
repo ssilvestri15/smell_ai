@@ -37,9 +37,10 @@ export async function detectAi(codeSnippet: string): Promise<DetectResponse> {
 }
 
 // Static analysis-based code smell detection
-export async function detectStatic(codeSnippet: string): Promise<DetectResponse> {
+export async function detectStatic(file_name: string, codeSnippet: string): Promise<DetectResponse> {
     try {
         const response = await axiosInstance.post(`${API_URL}/detect_smell_static`, {
+            file_name: file_name,
             code_snippet: codeSnippet,
         });
 

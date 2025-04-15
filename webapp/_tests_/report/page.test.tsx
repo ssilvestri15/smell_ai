@@ -62,6 +62,7 @@ describe("ReportGeneratorPage", () => {
         smells: [
           {
             smell_name: "Code Smell",
+            file_name: "file1.py",
             description: "Unoptimized code",
             function_name: "main",
             line: 1,

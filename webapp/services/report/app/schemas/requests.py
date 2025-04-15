@@ -4,6 +4,7 @@ from typing import List
 
 class SmellInfo(BaseModel):
     function_name: str
+    file_name: str
     line: int
     smell_name: str
     description: str

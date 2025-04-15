@@ -200,7 +200,7 @@ export default function UploadPythonPage() {
     const data: DetectResponse =
       analysisMode === "AI"
         ? await detectAi(fileContent)
-        : await detectStatic(fileContent);
+        : await detectStatic(file.name, fileContent);
 
     setProgress(70);
 

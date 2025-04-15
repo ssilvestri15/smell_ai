@@ -92,12 +92,13 @@ export default function ReportGeneratorPage() {
           project.data.smells?.map((smell: ContextSmell) => [
             smell.smell_name,
             smell.function_name,
+            smell.file_name,
             smell.line,
             smell.description,
           ]) || [];
 
         autoTable(doc, {
-          head: [["Smell Name", "Function Name", "Line", "Description"]],
+          head: [["Smell Name", "Function Name", "Filename", "Line", "Description"]],
           body: tableData.slice(0, 10),
           startY: currentY,
           showHead: "firstPage",
@@ -142,6 +143,7 @@ export default function ReportGeneratorPage() {
           if (smell && smell.smell_name) {
             return {
               smell_name: smell.smell_name,
+              file_name: smell.file_name || "N/A",
               description: smell.description || "No description provided",
               function_name: smell.function_name || "N/A",
               line: smell.line || -1,

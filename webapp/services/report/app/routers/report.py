@@ -24,6 +24,8 @@ async def generate_report(payload: GenerateReportRequest):
     Generate a report by aggregating smells across multiple projects.
     """
     try:
+        print("Generating report...")
+        print(payload)
         report_data = generate_report_data(payload.projects)
         return GenerateReportResponse(report_data=report_data)
     except ValueError as e:
