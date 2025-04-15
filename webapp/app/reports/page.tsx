@@ -14,6 +14,7 @@ export default function ReportGeneratorPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [chartData, setChartData] = useState<ChartData[] | null>(null);
   const [ChartSection, setChartSection] = useState<React.ComponentType<any> | null>(null);
+  const [reportResponse, setReportResponse] = useState<any | null>(null);
 
   const handleGenerateReports = async () => {
     if (projects.length === 0) {
@@ -46,7 +47,7 @@ export default function ReportGeneratorPage() {
       if (result.report_data) {
         const combinedData = extractChartData(result.report_data);
         setChartData(combinedData);
-       
+        setReportResponse(result);
       } else {
         throw new Error("Failed to retrieve report data.");
       }
@@ -216,6 +217,16 @@ export default function ReportGeneratorPage() {
             </motion.div>
           )}
         </div>
+
+        {reportResponse && (
+            <div className="mt-10 bg-gray-100 p-4 rounded-md overflow-x-auto text-sm text-gray-800">
+              <h2 className="font-bold text-lg mb-2">Debug Full Report Response:</h2>
+              <pre className="whitespace-pre-wrap break-words">
+                {JSON.stringify(reportResponse, null, 2)}
+              </pre>
+            </div>
+        )}
+
       </main>
       <Footer />
     </div>
