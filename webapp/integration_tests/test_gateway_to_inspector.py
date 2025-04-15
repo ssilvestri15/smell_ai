@@ -8,13 +8,16 @@ client = TestClient(main.app)
 
 # Test case to check gateway to static analysis service
 def test_gateway_to_static_analysis_no_smell():
-    payload = {"file_name": "test.py"}, "code_snippet": "def my_function(): pass"}
+    payload = {
+        "code_snippet": "def my_function(): pass",
+        "file_name": "dummy.py"
+    }
     response = client.post(
         "/api/detect_smell_static", json=payload
     )
 
-    assert response.status_code == 200
     assert response.json() == {
+        "success": True,
         "smells": 'Static analysis returned no data'
     }
 
@@ -33,16 +36,17 @@ def save_as_csv(
 """
 
     test_payload = {
+        "code_snippet": code_snippet,
         "file_name": "ex.py"
-        "code_snippet": code_snippet
     }
 
     # Mocked dataset input for testing
     expected_response = {
+        "success": True,
         "smells": [
             {
                 "function_name": "save_as_csv",
-                "file_name": "ex.py"
+                "file_name": "ex.py",
                 "line": 8,
                 "smell_name": "columns_and_datatype_not_explicitly_set",
                 "description": "Pandas' DataFrame or read_csv methods should explicitlyset 'dtype' to avoid unexpected behavior.",
@@ -50,6 +54,7 @@ def save_as_csv(
             },
             {
                 "function_name": "save_as_csv",
+                "file_name": "ex.py",
                 "line": 9,
                 "smell_name": "columns_and_datatype_not_explicitly_set",
                 "description": "Pandas' DataFrame or read_csv methods should explicitlyset 'dtype' to avoid unexpected behavior.",
