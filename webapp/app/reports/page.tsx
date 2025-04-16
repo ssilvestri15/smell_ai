@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ClipLoader } from "react-spinners";
 import Header from "../../components/HeaderComponent";
 import Footer from "../../components/FooterComponent";
@@ -7,228 +7,477 @@ import { generateReport } from "../../utils/api";
 import { useProjectContext } from "../../context/ProjectContext";
 import { toast } from "react-toastify";
 import { motion } from "framer-motion";
-import { ChartData, ContextSmell } from "@/types/types";
+import {
+  ContextSmell,
+  ProjectType,
+} from "@/types/types";
+import dynamic from 'next/dynamic';
+
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+});
+
+// Tipi per i dati dei grafici
+type SmellDistribution = { smell_name: string; count: number };
+type TopOffender = { filename: string; smell_count: number };
+type TopFunction = { function_name: string; filename: string; smell_count: number };
+type HeatmapDataItem = { filename: string; smell_name: string; count: number };
+type StackedDataItem = { filename: string; smell_name: string; count: number };
+
+// Definizione del tipo GenerateReportResponse basato sulla struttura fornita
+export type GenerateReportResponse = {
+  report_data?: {
+    all_projects_combined?: { smell_name: string; filename: string }[];
+  };
+  project_health?: Record<string, number>;
+  top_offenders?: Record<string, TopOffender[]>;
+  top_functions?: Record<string, TopFunction[]>;
+  stacked_data?: Record<string, StackedDataItem[]>;
+  heatmap_data?: Record<string, HeatmapDataItem[]>;
+  smells_distribution?: Record<string, SmellDistribution[]>;
+};
 
 export default function ReportGeneratorPage() {
   const { projects } = useProjectContext();
   const [loading, setLoading] = useState<boolean>(false);
-  const [chartData, setChartData] = useState<ChartData[] | null>(null);
-  const [ChartSection, setChartSection] = useState<React.ComponentType<any> | null>(null);
-  const [reportResponse, setReportResponse] = useState<any | null>(null);
+  const [reportResponse, setReportResponse] = useState<GenerateReportResponse | null>(null);
+  const [selectedProject, setSelectedProject] = useState<ProjectType | null>(null);
 
-  const handleGenerateReports = async () => {
-    if (projects.length === 0) {
-      toast.error("No projects available. Please add projects before generating reports.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // Dynamically load the ChartSection component
-      const ChartSectionModule = await import("../../components/ChartSection");
-      setChartSection(() => ChartSectionModule.default);
-
-      const formattedProjects = formatProjectsData(projects);
-
-      const areAllProjectsEmpty = formattedProjects.every(
-        (project) =>
-          (!project.data.smells || project.data.smells.length === 0)
-      );
-
-      if (areAllProjectsEmpty) {
-        toast.info("No smell data to display.");
-        setLoading(false);
-        return;
-      }
-
-      const result = await generateReport(formattedProjects);
-
-      if (result.report_data) {
-        const combinedData = extractChartData(result.report_data);
-        setChartData(combinedData);
-        setReportResponse(result);
-      } else {
-        throw new Error("Failed to retrieve report data.");
-      }
-    } catch (error) {
-      console.error("Error generating reports:", error);
-      toast.error("An error occurred while generating reports. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadPDF = async () => {
-    if (!chartData) {
-      toast.error("No data available for the report.");
-      return;
-    }
-
-    try {
-      // Dynamically load jsPDF and autoTable
-      const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
-
-      // Define jsPDFDocument type dynamically
-      type jsPDFDocument = typeof jsPDF & {
-        lastAutoTable: {
-          finalY: number;
-        };
-      };
-
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text("Smell Analysis Report", 14, 20);
-
-      let currentY = 30;
-
-      projects.forEach((project) => {
-        const projectTitle = project.name || "Unnamed Project";
-        doc.setFontSize(14);
-        doc.text(`Project: ${projectTitle}`, 14, currentY);
-        currentY += 10;
-
-        const tableData =
-          project.data.smells?.map((smell: ContextSmell) => [
-            smell.smell_name,
-            smell.function_name,
-            smell.file_name,
-            smell.line,
-            smell.description,
-          ]) || [];
-
-        autoTable(doc, {
-          head: [["Smell Name", "Function Name", "Filename", "Line", "Description"]],
-          body: tableData.slice(0, 10),
-          startY: currentY,
-          showHead: "firstPage",
-          pageBreak: "auto",
-        });
-
-        currentY = (doc as unknown as jsPDFDocument).lastAutoTable.finalY + 10;
-      });
-
-      doc.save("smell_analysis_report.pdf");
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("An error occurred while generating the PDF. Please try again.");
-    }
-  };
-
-  const formatProjectsData = (projects: any[]) => {
-    return projects.map((project) => ({
-      name: project.name || "Unnamed Project",
-      data: {
-        files:
-          project.files?.map((file: File) => ({
-            name: file.name,
-            size: file.size,
-            type: file.type || "unknown",
-            path: file.webkitRelativePath || "",
-          })) || [],
-        message: project.data?.message || "No message provided",
-        result: project.data?.result || "No result available",
-        smells: formatSmells(project.data?.smells),
-      },
-    }));
-  };
-
-  const formatSmells = (smells: ContextSmell[]) => {
-    return (
-      smells
-        ?.map((smell) => {
-          if (typeof smell === "string" && smell === "Static analysis returned no data") {
-            return null;
+  // Funzione per formattare gli smell
+  const formatSmells = useCallback(
+    (smells: ContextSmell[] | null | undefined): ContextSmell[] => {
+      return (
+        smells?.reduce<ContextSmell[]>((acc, smell) => {
+          if (
+            typeof smell === "string" &&
+            smell === "Static analysis returned no data"
+          ) {
+            return acc;
           }
           if (smell && smell.smell_name) {
-            return {
+            acc.push({
               smell_name: smell.smell_name,
               file_name: smell.file_name || "N/A",
               description: smell.description || "No description provided",
               function_name: smell.function_name || "N/A",
               line: smell.line || -1,
               additional_info: smell.additional_info || "N/A",
-            };
+            });
           }
-          return null;
-        })
-        .filter((smell) => smell !== null) || []
-    );
-  };
+          return acc;
+        }, []) || []
+      );
+    },
+    []
+  );
 
-  const extractChartData = (reportData: any) => {
-    const combinedData: ChartData[] = [];
-    Object.keys(reportData).forEach((projectKey) => {
-      const projectData = reportData[projectKey];
-      projectData.forEach((item: ChartData) => combinedData.push(item));
-    });
-    return combinedData;
-  };
+  // Funzione per formattare i dati dei progetti
+  const formatProjectsData = useCallback(
+    (projects: ProjectType[]) => {
+      return projects.map((project) => ({
+        name: project.name || "Unnamed Project",
+        data: {
+          files:
+            project.files?.map((file: File) => ({
+              name: file.name,
+              size: file.size.toString(),
+              type: file.type || "unknown",
+              path: file.webkitRelativePath || "",
+            })) || [],
+          message: project.data?.message || "No message provided",
+          result: project.data?.result || "No result available",
+          smells: formatSmells(project.data?.smells),
+        },
+      }));
+    },
+    [formatSmells]
+  );
+
+  // Funzione per generare il report
+  const generateReportData = useCallback(async () => {
+    if (projects.length === 0) {
+      toast.info("Nessun progetto disponibile.");
+      setReportResponse(null);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const formattedProjects = formatProjectsData(projects);
+      const result = await generateReport(formattedProjects) as GenerateReportResponse;
+      setReportResponse(result);
+    } catch (error) {
+      console.error("Errore durante la generazione dei report:", error);
+      toast.error(
+        "Si è verificato un errore durante la generazione dei report."
+      );
+      setReportResponse(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [projects, formatProjectsData]);
+
+  // Effetto per generare il report automaticamente
+  useEffect(() => {
+    generateReportData();
+  }, [projects, generateReportData]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!reportResponse?.report_data) {
+      toast.error("Nessun dato disponibile per il report PDF.");
+      return;
+    }
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
+
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text("Rapporto di Analisi degli Smell", 14, 20);
+
+      let currentY = 30;
+
+      for (const project of projects) {
+        const projectTitle = project.name || "Progetto Senza Nome";
+        doc.setFontSize(14);
+        doc.text(`Progetto: ${projectTitle}`, 14, currentY);
+        currentY += 10;
+
+        const smells = project.data?.smells;
+        if (smells && smells.length > 0) {
+          const tableData = smells.map((smell: ContextSmell) => [
+            smell.smell_name,
+            smell.function_name,
+            smell.file_name,
+            smell.line,
+            smell.description,
+          ]);
+
+          autoTable(doc, {
+            head: [
+              ["Nome Smell", "Nome Funzione", "Nome File", "Linea", "Descrizione"],
+            ],
+            body: tableData.slice(0, 15),
+            startY: currentY,
+            showHead: "firstPage",
+            pageBreak: "auto",
+          });
+          // @ts-ignore
+          currentY = doc.lastAutoTable.finalY + 10;
+        } else {
+          doc.text("Nessun smell rilevato per questo progetto.", 14, currentY);
+          currentY += 10;
+        }
+      }
+
+      doc.save("smell_analysis_report.pdf");
+    } catch (error) {
+      console.error("Errore durante la generazione del PDF:", error);
+      toast.error(
+        "Si è verificato un errore durante la generazione del PDF. Riprova."
+      );
+    }
+  }, [projects, reportResponse]);
+
+  // Funzioni per estrarre i dati per i grafici (ora specifiche per progetto)
+  const extractSmellDistribution = useCallback(
+    (data: GenerateReportResponse | null, projectName: string | undefined): SmellDistribution[] => {
+      if (!data?.smells_distribution || !projectName || !data.smells_distribution[projectName]) return [];
+      const distribution: { [key: string]: number } = {};
+      data.smells_distribution[projectName].forEach((item: { smell_name: string }) => {
+        distribution[item.smell_name] = (distribution[item.smell_name] || 0) + 1;
+      });
+      return Object.entries(distribution).map(([smell_name, count]) => ({
+        smell_name,
+        count,
+      }));
+    },
+    []
+  );
+
+  const extractTopOffenders = useCallback(
+    (data: GenerateReportResponse | null, projectName: string | undefined): TopOffender[] => {
+      if (!data?.top_offenders || !projectName || !data.top_offenders[projectName]) return [];
+      return data.top_offenders[projectName];
+    },
+    []
+  );
+
+  const extractTopFunctions = useCallback(
+    (data: GenerateReportResponse | null, projectName: string | undefined): TopFunction[] => {
+      if (!data?.top_functions || !projectName || !data.top_functions[projectName]) return [];
+      return data.top_functions[projectName];
+    },
+    []
+  );
+
+  const extractHeatmapData = useCallback(
+    (data: GenerateReportResponse | null, projectName: string | undefined): HeatmapDataItem[] => {
+      if (!data?.heatmap_data || !projectName || !data.heatmap_data[projectName]) return [];
+      return data.heatmap_data[projectName];
+    },
+    []
+  );
+
+  const extractStackedData = useCallback(
+    (data: GenerateReportResponse | null, projectName: string | undefined): StackedDataItem[] => {
+      if (!data?.stacked_data || !projectName || !data.stacked_data[projectName]) return [];
+      return data.stacked_data[projectName];
+    },
+    []
+  );
+
+  // Dati per i grafici (ora dipendenti dal progetto selezionato)
+  const selectedProjectName = selectedProject?.name;
+  const smellDistributionData = extractSmellDistribution(reportResponse, selectedProjectName);
+  const topOffendersData = extractTopOffenders(reportResponse, selectedProjectName);
+  const topFunctionsData = extractTopFunctions(reportResponse, selectedProjectName);
+  const heatmapData = extractHeatmapData(reportResponse, selectedProjectName);
+  const stackedData = extractStackedData(reportResponse, selectedProjectName);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
-      <main className="flex-grow py-16 bg-gradient-to-b from-blue-50 via-blue-100 to-gray-50">
-        <div className="max-w-3xl mx-auto p-8 bg-white shadow-xl rounded-2xl border border-gray-200">
+      <div className="flex flex-grow" style={{ paddingTop: "45px" }}>
+        <aside className="bg-white w-64 p-6 border-r border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800 mb-6">Progetti</h2>
+          <ul className="space-y-2">
+            {projects.map((project, index) => (
+              <li
+                key={index}
+                className={`py-2 px-3 rounded-md cursor-pointer transition-colors duration-200 ${selectedProject?.name === project.name
+                  ? "font-semibold text-blue-600 bg-blue-50"
+                  : "text-gray-700 hover:text-blue-500 hover:bg-gray-100"
+                  }`}
+                onClick={() => setSelectedProject(project)}
+              >
+                {project.name || `Progetto ${index + 1}`}
+              </li>
+            ))}
+          </ul>
+        </aside>
+        <main className="flex-1 p-8 bg-gray-50">
           <motion.h1
-            className="text-4xl font-extrabold text-blue-700 mb-8 text-center"
+            className="text-3xl font-semibold text-gray-800 mb-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
           >
-            Report Generator
+            Dashboard Report - {selectedProject?.name || "Seleziona un Progetto"}
           </motion.h1>
 
-          <div className="mb-8">
-            <p className="text-lg font-semibold text-gray-700">
-              Total Projects Available: {projects.length}
-            </p>
-          </div>
-
-          <motion.button
-            onClick={handleGenerateReports}
-            className="w-full bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-800 transition-all"
-            disabled={loading}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            {loading ? <ClipLoader size={24} color="#ffffff" data-testid="clip-loader" /> : "Generate Report"}
-          </motion.button>
-
-          {chartData && ChartSection && (
-            <motion.div
-              id="chart-div"
-              className="mt-8"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <ChartSection chartData={chartData} />
-              <motion.button
-                onClick={handleDownloadPDF}
-                className="mt-4 w-full bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Download Report as PDF
-              </motion.button>
-            </motion.div>
-          )}
-        </div>
-
-        {reportResponse && (
-            <div className="mt-10 bg-gray-100 p-4 rounded-md overflow-x-auto text-sm text-gray-800">
-              <h2 className="font-bold text-lg mb-2">Debug Full Report Response:</h2>
-              <pre className="whitespace-pre-wrap break-words">
-                {JSON.stringify(reportResponse, null, 2)}
-              </pre>
+          {loading ? (
+            <div className="flex justify-center items-center h-48">
+              <ClipLoader size={36} color="#4A5568" />
             </div>
-        )}
+          ) : !reportResponse?.report_data ? (
+            <div className="text-gray-600">Nessun dato del report disponibile.</div>
+          ) : !selectedProject ? (
+            <div className="text-gray-600">Seleziona un progetto per visualizzare il report.</div>
+          ) : (
+            <div>
+              <div className="mb-6">
+                <motion.button
+                  onClick={handleDownloadPDF}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Scarica come PDF
+                </motion.button>
+              </div>
 
-      </main>
-      <Footer />
+              {/* Cards con i grafici */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {/* Smell Density */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Densità degli Smell
+                  </h3>
+                  <p className="text-4xl font-bold text-blue-600 mb-1">
+                    {reportResponse?.report_data?.all_projects_combined?.filter(
+                      (item: { filename: string }) => {
+                        const selectedProjectData = projects.find((p) => p.name === selectedProjectName)?.data;
+                        if (selectedProjectData?.files) {
+                          return selectedProjectData.files.some(
+                            (f: { name: string } | string) => typeof f !== 'string' && (f as { name: string }).name === item.filename
+                          );
+                        }
+                        return false;
+                      }
+                    )?.length || 0}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Totale smell rilevati nel progetto
+                  </p>
+                  {/* Qui andrebbe il grafico della densità (es. un numero grande) */}
+                </motion.div>
+
+                {/* Bar Chart - Numero di Smell per Categoria */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Smell per Categoria
+                  </h3>
+                  {smellDistributionData.length > 0 ? (
+                    <Plot
+                      data={[
+                        {
+                          x: smellDistributionData.map((item) => item.smell_name),
+                          y: smellDistributionData.map((item) => item.count),
+                          type: "bar",
+                          marker: { color: "#007aff" },
+                        },
+                      ]}
+                      layout={{ title: { text: "Distribuzione degli Smell", font: { size: 16 } }, margin: { t: 30, l: 50, b: 50, r: 30 } }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  ) : (
+                    <Plot data={[{}]} layout={{}} style={{ width: "100%", height: "300px" }} />
+                  )}
+                </motion.div>
+
+                {/* Top Offenders (Files con più Smell) */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Top Offenders (Files)
+                  </h3>
+                  {topOffendersData.length > 0 ? (
+                    <Plot
+                      data={[
+                        {
+                          x: topOffendersData.map((item) => item.filename),
+                          y: topOffendersData.map((item) => parseInt(item.smell_count + '', 10)),
+                          type: "bar",
+                          marker: { color: "#ff9500" },
+                        },
+                      ]}
+                      layout={{ title: { text: "Files con più Smell", font: { size: 16 } }, margin: { t: 30, l: 50, b: 50, r: 30 } }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  ) : (
+                    <Plot data={[{}]} layout={{}} style={{ width: "100%", height: "300px" }} />
+                  )}
+                </motion.div>
+
+                {/* Top Functions (Funzioni con più Smell) */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Top Functions
+                  </h3>
+                  {topFunctionsData.length > 0 ? (
+                    <Plot
+                      data={[
+                        {
+                          x: topFunctionsData.map((item) => item.function_name),
+                          y: topFunctionsData.map((item) => parseInt(item.smell_count + '', 10)),
+                          type: "bar",
+                          marker: { color: "#4cd964" },
+                        },
+                      ]}
+                      layout={{ title: { text: "Funzioni con più Smell", font: { size: 16 } }, margin: { t: 30, l: 50, b: 50, r: 30 } }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  ) : (
+                    <Plot data={[{}]} layout={{}} style={{ width: "100%", height: "300px" }} />
+                  )}
+                </motion.div>
+
+                {/* Heatmap */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Heatmap degli Smell
+                  </h3>
+                  {heatmapData.length > 0 ? (
+                    <Plot
+                      data={[
+                        {
+                          z: heatmapData.map((item) => parseInt(item.count + '', 10)),
+                          x: [...new Set(heatmapData.map((item) => item.filename))],
+                          y: [...new Set(heatmapData.map((item) => item.smell_name))],
+                          type: "heatmap",
+                          colorscale: "Viridis",
+                        },
+                      ]}
+                      layout={{ title: { text: "Heatmap degli Smell per File", font: { size: 16 } }, margin: { t: 30, l: 50, b: 50, r: 30 } }}
+                      style={{ width: "100%", height: "400px" }}
+                    />
+                  ) : (
+                    <Plot data={[{}]} layout={{}} style={{ width: "100%", height: "400px" }} />
+                  )}
+                </motion.div>
+
+                {/* Stacked Bar Chart */}
+                <motion.div
+                  className="bg-white shadow-sm rounded-lg p-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    Distribuzione Smell per File
+                  </h3>
+                  {stackedData.length > 0 ? (
+                    <Plot
+                      data={Object.entries(
+                        stackedData.reduce((acc: Record<string, Record<string, number>>, item) => {
+                          acc[item.filename] = acc[item.filename] || {};
+                          acc[item.filename][item.smell_name] =
+                            (acc[item.filename][item.smell_name] || 0) +
+                            parseInt(item.count + '', 10);
+                          return acc;
+                        }, {})
+                      ).map(([filename, smells]) => ({
+                        x: Object.keys(smells),
+                        y: Object.values(smells).map(value => parseInt(value + '', 10)),
+                        type: "bar",
+                        name: filename,
+                        stackgroup: "files",
+                      }))}
+                      layout={{
+                        title: { text: "Distribuzione degli Smell per File", font: { size: 16 } },
+                        barmode: "stack",
+                        yaxis: { title: { text: "Numero di Smell", font: { size: 12 } } },
+                        xaxis: { title: { text: "Tipo di Smell", font: { size: 12 } } },
+                        margin: { t: 30, l: 50, b: 50, r: 30 },
+                      }}
+                      style={{ width: "100%", height: "400px" }}
+                    />
+                  ) : (
+                    <Plot data={[{}]} layout={{}} style={{ width: "100%", height: "400px" }} />
+                  )}
+                </motion.div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
