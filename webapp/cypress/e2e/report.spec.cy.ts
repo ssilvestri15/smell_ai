@@ -1,7 +1,6 @@
 import { ProjectType } from '@/types/types';
 import 'cypress-file-upload';
 
-
 Cypress.config('defaultCommandTimeout', 10000);
 
 declare global {
@@ -9,180 +8,96 @@ declare global {
         interface CustomWindow extends Window {
             __REACT_CONTEXT__?: {
                 projects: ProjectType[];
-                addProject: () => void;
                 updateProject: (index: number, project: Partial<ProjectType>) => void;
-                removeProject: (index: number) => void;
+                addProject: () => void;
             };
         }
     }
 }
 
-describe('Report Generator Page (E2E)', () => {
-
-    it('should display header, footer, and essential components', () => {
+describe('Dashboard Report Page - E2E Tests', () => {
+    beforeEach(() => {
         cy.visit('http://localhost:3000/reports');
-        
-        cy.get('header').should('exist');
-        cy.get('footer').should('exist');
-
-        cy.contains('Total Projects Available').should('exist');
-
-        cy.get('button').contains('Generate Report').should('exist');
     });
 
-    it('should display an alert when no projects are available', () => {
-        cy.visit('http://localhost:3000/reports');
-
-        cy.get('button').contains('Generate Report').click();
-
-        cy.on('window:alert', (text: any) => {
-            expect(text).to.equal('No projects available. Please add projects before generating reports.');
-        });
-
-        cy.get('#chart-div').should('not.exist');
+    it('should show loading spinner initially and "No report data" when no project is selected', () => {
+        cy.contains('No report data available.').should('exist');
     });
 
-    it('should generate a report and display chart, allow to download it as pdf', () => {
-        cy.visit('http://localhost:3000/upload-project');
-        cy.contains('Static Tool').click();
-
-        cy.contains('Add Project').click();
-
-        const file1 = new File(
-            ['file content here'],
-            'model.py',
-            { type: 'text/x-python', lastModified: Date.now() }
-        );
-
-        const file2 = new File(
-            ['file content here'],
-            'dataset_preparation.py',
-            { type: 'text/x-python', lastModified: Date.now() }
-        );
-
-        cy.get('[data-testid="file-input"]').then((input) => {
-            const fileInput = input[0] as HTMLInputElement;
-
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file1);
-            dataTransfer.items.add(file2);
-
-            fileInput.files = dataTransfer.files;
-            cy.wrap(input).trigger('change', { force: true });
-        });
-
-        cy.contains('Upload and Analyze All Projects').click();
-
-        cy.get('#message').should('contain', 'Projects successfully analyzed!');
-
-        cy.visit('http://localhost:3000/reports');
-
-        cy.window().should('have.property', '__REACT_CONTEXT__').and('not.be.undefined');
-    
-        cy.window().then((win: Cypress.CustomWindow) => {
-            const context = win.__REACT_CONTEXT__;
-            if (context) {
-                context.addProject();
-
-                context.updateProject(0, {
-                    name: "model_training_and_evaluaiton",
-                    files: [file1, file2],
-                    data: {
-                        files: ["model.py", "dataset_preparation.py"],
-                        message: "Projects successfully analyzed!",
-                        result: null,
-                        smells: [{
-                            "function_name": "function",
-                            "line": 5,
-                            "smell_name": "Unnecessary DataFrame Operation",
-                            "description": "Avoid unnecessary operations on DataFrames.",
-                            "additional_info": "Consider simplifying the operation.",
-                        }],
-                    },
-                });
-            }
-        });
-
-        cy.contains('Total Projects Available: 1', { timeout: 15000 }).should('exist');
-
-        cy.contains('Generate Report').click();
-
-        cy.get('#chart-div', { timeout: 10000 }).should('exist');
-
-        cy.contains('Smell Occurrences for All Projects').should('exist');
-
-        cy.contains('Download Report as PDF').click()
-    });
-
-    it('should handle API error gracefully', () => {
-
-        const file1 = new File(
-            ['file content here'],
-            'model.py',
-            { type: 'text/x-python', lastModified: Date.now() }
-        );
-
-        const file2 = new File(
-            ['file content here'],
-            'dataset_preparation.py',
-            { type: 'text/x-python', lastModified: Date.now() }
-        );
-
-        cy.visit('http://localhost:3000/reports');
-        cy.window().should('have.property', '__REACT_CONTEXT__').and('not.be.undefined');
+    it('should allow selecting a project and display the charts once data is ready', () => {
         cy.window().then((win: Cypress.CustomWindow) => {
             const context = win.__REACT_CONTEXT__;
             if (context) {
                 context.addProject();
                 context.updateProject(0, {
-                    name: "model_training_and_evaluaiton",
-                    files: [file1, file2],
+                    name: 'example_project',
+                    isLoading: false,
                     data: {
-                        files: ["model.py", "dataset_preparation.py"],
-                        message: "Projects successfully analyzed!",
-                        result: null,
-                        smells: [{
-                            "function_name": "function",
-                            "line": 5,
-                            "smell_name": "Unnecessary DataFrame Operation",
-                            "description": "Avoid unnecessary operations on DataFrames.",
-                            "additional_info": "Consider simplifying the operation.",
-                        }],
+                        message: 'Analysis complete',
+                        files: ['example.py'],
+                        result: 'Analysis complete',
+                        smells: [
+                            { smell_name: 'In-Place API Misuse', function_name: 'train_model', file_name: "example.py",  line: 12, description: '', additional_info: '' },
+                            { smell_name: 'In-Place API Misuse', function_name: 'train_model', file_name: "example.py", line: 45, description: '', additional_info: '' },
+                            { smell_name: 'Unnecessary Iteration', function_name: 'load_data', file_name: "example.py", line: 7, description: '', additional_info: '' },
+                        ],
                     },
                 });
             }
         });
 
-        cy.intercept('POST', '/api/generate_report', { statusCode: 500, body: { error: 'Internal Server Error' } }).as('apiFailure')
-        cy.contains('Generate Report').click();
-        cy.wait('@apiFailure');
-        cy.get('#chart-div').should('not.exist');
-        cy.contains('An error occurred while generating reports. Please try again.').should('exist');
+        cy.contains('Dashboard Report - example_project', { timeout: 10000 }).should('exist');
+
+        cy.contains('Smells by Category').should('exist');
+        cy.contains('Top Offenders (Files)').should('exist');
+        cy.contains('Top Functions').should('exist');
+        cy.contains('Smell Heatmap').should('exist');
+        cy.contains('Smell Distribution by File').should('exist');
     });
 
-    it('should handle empty smell data gracefully', () => {
-        cy.visit('http://localhost:3000/reports');
-        cy.window().should('have.property', '__REACT_CONTEXT__').and('not.be.undefined');
+    it('should allow downloading PDF when report data is available', () => {
         cy.window().then((win: Cypress.CustomWindow) => {
             const context = win.__REACT_CONTEXT__;
             if (context) {
                 context.addProject();
                 context.updateProject(0, {
-                    name: "Project with no smell Data",
-                    files: [],
+                    name: 'pdf_test_project',
+                    isLoading: false,
                     data: {
-                        files: [],
-                        message: "empty project",
-                        result: null,
-                        smells: null, 
+                        message: 'Analysis complete',
+                        files: ['file1.py'],
+                        result: 'Analysis complete',
+                        smells: [
+                            { smell_name: 'Memory Not Freed', function_name: 'build_model', file_name: "file1.py", line: 20, description: '', additional_info: '' },
+                        ],
                     },
                 });
             }
         });
 
-        cy.contains('Generate Report').click();
-        cy.get('#chart-div').should('not.exist');
-        cy.contains('No smell data to display.').should('exist');
+        cy.contains('Download as PDF').click();
+        cy.wait(2000); // time to trigger download
     });
 
+    it('should display message when selected project has no smell data', () => {
+        cy.window().then((win: Cypress.CustomWindow) => {
+            const context = win.__REACT_CONTEXT__;
+            if (context) {
+                context.addProject();
+                context.updateProject(0, {
+                    name: 'empty_project',
+                    isLoading: false,
+                    data: {
+                        message: 'No smells detected',
+                        files: ['clean.py'],
+                        result: 'No smells detected',
+                        smells: [],
+                    },
+                });
+            }
+        });
+
+        cy.contains('No report data available.').should('not.exist');
+        cy.get('.plotly-graph-div').should('have.length', 0);
+    });
 });

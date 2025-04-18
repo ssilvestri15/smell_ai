@@ -23,7 +23,7 @@ import PDFDownloadButton from "../../components/PDFDownloadButton";
 // Lazy load Plot component
 const Plot = dynamic(() => import('react-plotly.js'), {
   ssr: false,
-  loading: () => <div className="flex justify-center items-center h-48"><ClipLoader size={36} color="#4A5568" /></div>
+  loading: () => <div className="flex justify-center items-center h-48"><ClipLoader size={36} color="#4A5568" data-testid="clip-loader" /></div>
 });
 
 export default function ReportGeneratorPage() {
@@ -78,14 +78,14 @@ export default function ReportGeneratorPage() {
 
           {loading ? (
             <div className="flex justify-center items-center h-48">
-              <ClipLoader size={36} color="#4A5568" />
+              <ClipLoader size={36} color="#4A5568" data-testid="clip-loader" />
             </div>
           ) : !reportResponse?.report_data ? (
             <div className="text-gray-600">No report data available.</div>
           ) : !selectedProject ? (
             <div className="text-gray-600">Select a project to view the report.</div>
           ) : selectedProject.isLoading ? (<div className="flex justify-center items-center h-48">
-            <ClipLoader size={36} color="#4A5568" />
+            <ClipLoader size={36} color="#4A5568" data-testid="clip-loader" />
           </div>) : (
             <div>
               {/* PDF Download Button */}
