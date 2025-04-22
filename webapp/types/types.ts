@@ -8,17 +8,53 @@ export type ContextSmell = {
 };
 
 export type DetectResponse = {
-    success: boolean;
-    smells: ContextSmell[];
+  success: boolean;
+  smells: ContextSmell[];
 }
+
+export type SmellDistribution = {
+  smell_name: string;
+  count: number
+};
+
+export type TopOffender = {
+  filename: string;
+  smell_count: number
+};
+
+export type TopFunction = {
+  function_name: string;
+  filename: string;
+  smell_count: number
+};
+
+export type HeatmapDataItem = {
+  filename: string;
+  smell_name: string;
+  count: number
+};
+
+export type StackedDataItem = {
+  filename: string;
+  smell_name: string;
+  count: number
+};
 
 export type GenerateReportResponse = {
-    report_data: Record<string, any>;
-}
+  report_data?: {
+    all_projects_combined?: { smell_name: string; filename: string }[];
+  };
+  project_health?: Record<string, number>;
+  top_offenders?: Record<string, TopOffender[]>;
+  top_functions?: Record<string, TopFunction[]>;
+  stacked_data?: Record<string, StackedDataItem[]>;
+  heatmap_data?: Record<string, HeatmapDataItem[]>;
+  smells_distribution?: Record<string, SmellDistribution[]>;
+};
 
-export type ChartData = { 
+export type ChartData = {
   smell_name: string;
-  filename: string 
+  filename: string
 };
 
 export type ProjectType = {

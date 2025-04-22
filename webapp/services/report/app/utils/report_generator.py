@@ -94,16 +94,6 @@ def generate_report_data(projects: list) -> dict:
             "all_projects_combined": chart_data.to_dict(orient="records")
         }
 
-    print({
-        "report_data": agg_chart,
-        "project_health": project_health,
-        "top_offenders": top_offenders,
-        "top_functions": top_functions,
-        "stacked_data": stacked_data,
-        "heatmap_data": heatmap_data,
-        "smells_distribution": smells_distribution
-    })
-
     return {
         "report_data": agg_chart,
         "project_health": project_health,

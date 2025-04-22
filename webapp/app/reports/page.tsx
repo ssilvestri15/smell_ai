@@ -1,234 +1,243 @@
+// ReportGeneratorPage.tsx
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ClipLoader } from "react-spinners";
 import Header from "../../components/HeaderComponent";
-import Footer from "../../components/FooterComponent";
-import { generateReport } from "../../utils/api";
 import { useProjectContext } from "../../context/ProjectContext";
-import { toast } from "react-toastify";
 import { motion } from "framer-motion";
-import { ChartData, ContextSmell } from "@/types/types";
+import {
+  ProjectType,
+  SmellDistribution,
+  TopOffender,
+  TopFunction,
+  HeatmapDataItem,
+  StackedDataItem
+} from "@/types/types";
+import ProjectSidebar from "../../components/ProjectSidebar";
+import ChartContainer from "../../components/ChartContainer";
+import SmellDensityCard from "../../components/SmellDensityCard";
+import dynamic from 'next/dynamic';
+import { useReportData } from "../../hooks/useReportData";
+import PDFDownloadButton from "../../components/PDFDownloadButton";
+
+// Lazy load Plot component
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+  loading: () => <div className="flex justify-center items-center h-48"><ClipLoader size={36} color="#4A5568" data-testid="clip-loader" /></div>
+});
 
 export default function ReportGeneratorPage() {
-  const { projects } = useProjectContext();
-  const [loading, setLoading] = useState<boolean>(false);
-  const [chartData, setChartData] = useState<ChartData[] | null>(null);
-  const [ChartSection, setChartSection] = useState<React.ComponentType<any> | null>(null);
-  const [reportResponse, setReportResponse] = useState<any | null>(null);
+  const { projects, updateProject, addProject } = useProjectContext();
+  const [selectedProject, setSelectedProject] = useState<ProjectType | null>(null);
 
-  const handleGenerateReports = async () => {
-    if (projects.length === 0) {
-      toast.error("No projects available. Please add projects before generating reports.");
-      return;
+  const {
+    loading,
+    reportResponse,
+    generateReportData,
+    smellDistributionData,
+    topOffendersData,
+    topFunctionsData,
+    heatmapData,
+    stackedData
+  } = useReportData(projects, selectedProject);
+
+  // Auto-select first project when projects load
+  useEffect(() => {
+    if (!selectedProject && projects.length > 0) {
+      setSelectedProject(projects[0]);
     }
+  }, [projects, selectedProject]);
 
-    setLoading(true);
-
-    try {
-      // Dynamically load the ChartSection component
-      const ChartSectionModule = await import("../../components/ChartSection");
-      setChartSection(() => ChartSectionModule.default);
-
-      const formattedProjects = formatProjectsData(projects);
-
-      const areAllProjectsEmpty = formattedProjects.every(
-        (project) =>
-          (!project.data.smells || project.data.smells.length === 0)
-      );
-
-      if (areAllProjectsEmpty) {
-        toast.info("No smell data to display.");
-        setLoading(false);
-        return;
-      }
-
-      const result = await generateReport(formattedProjects);
-
-      if (result.report_data) {
-        const combinedData = extractChartData(result.report_data);
-        setChartData(combinedData);
-        setReportResponse(result);
-      } else {
-        throw new Error("Failed to retrieve report data.");
-      }
-    } catch (error) {
-      console.error("Error generating reports:", error);
-      toast.error("An error occurred while generating reports. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadPDF = async () => {
-    if (!chartData) {
-      toast.error("No data available for the report.");
-      return;
-    }
-
-    try {
-      // Dynamically load jsPDF and autoTable
-      const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
-
-      // Define jsPDFDocument type dynamically
-      type jsPDFDocument = typeof jsPDF & {
-        lastAutoTable: {
-          finalY: number;
-        };
-      };
-
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text("Smell Analysis Report", 14, 20);
-
-      let currentY = 30;
-
-      projects.forEach((project) => {
-        const projectTitle = project.name || "Unnamed Project";
-        doc.setFontSize(14);
-        doc.text(`Project: ${projectTitle}`, 14, currentY);
-        currentY += 10;
-
-        const tableData =
-          project.data.smells?.map((smell: ContextSmell) => [
-            smell.smell_name,
-            smell.function_name,
-            smell.file_name,
-            smell.line,
-            smell.description,
-          ]) || [];
-
-        autoTable(doc, {
-          head: [["Smell Name", "Function Name", "Filename", "Line", "Description"]],
-          body: tableData.slice(0, 10),
-          startY: currentY,
-          showHead: "firstPage",
-          pageBreak: "auto",
-        });
-
-        currentY = (doc as unknown as jsPDFDocument).lastAutoTable.finalY + 10;
-      });
-
-      doc.save("smell_analysis_report.pdf");
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("An error occurred while generating the PDF. Please try again.");
-    }
-  };
-
-  const formatProjectsData = (projects: any[]) => {
-    return projects.map((project) => ({
-      name: project.name || "Unnamed Project",
-      data: {
-        files:
-          project.files?.map((file: File) => ({
-            name: file.name,
-            size: file.size,
-            type: file.type || "unknown",
-            path: file.webkitRelativePath || "",
-          })) || [],
-        message: project.data?.message || "No message provided",
-        result: project.data?.result || "No result available",
-        smells: formatSmells(project.data?.smells),
-      },
-    }));
-  };
-
-  const formatSmells = (smells: ContextSmell[]) => {
-    return (
-      smells
-        ?.map((smell) => {
-          if (typeof smell === "string" && smell === "Static analysis returned no data") {
-            return null;
-          }
-          if (smell && smell.smell_name) {
-            return {
-              smell_name: smell.smell_name,
-              file_name: smell.file_name || "N/A",
-              description: smell.description || "No description provided",
-              function_name: smell.function_name || "N/A",
-              line: smell.line || -1,
-              additional_info: smell.additional_info || "N/A",
-            };
-          }
-          return null;
-        })
-        .filter((smell) => smell !== null) || []
-    );
-  };
-
-  const extractChartData = (reportData: any) => {
-    const combinedData: ChartData[] = [];
-    Object.keys(reportData).forEach((projectKey) => {
-      const projectData = reportData[projectKey];
-      projectData.forEach((item: ChartData) => combinedData.push(item));
-    });
-    return combinedData;
-  };
+  // Auto-generate report when projects or selected project changes
+  useEffect(() => {
+    generateReportData();
+  }, [generateReportData]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
-      <main className="flex-grow py-16 bg-gradient-to-b from-blue-50 via-blue-100 to-gray-50">
-        <div className="max-w-3xl mx-auto p-8 bg-white shadow-xl rounded-2xl border border-gray-200">
+      <div className="flex flex-grow" style={{ paddingTop: "45px" }}>
+        {/* Project sidebar */}
+        <ProjectSidebar
+          projects={projects}
+          selectedProject={selectedProject}
+          onSelectProject={setSelectedProject}
+          updateProject={updateProject}
+        />
+
+        {/* Main content */}
+        <main className="flex-1 p-8 bg-gray-50">
           <motion.h1
-            className="text-4xl font-extrabold text-blue-700 mb-8 text-center"
+            className="text-3xl font-semibold text-gray-800 mb-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
           >
-            Report Generator
+            Dashboard Report - {selectedProject?.name || "Select a Project"}
           </motion.h1>
 
-          <div className="mb-8">
-            <p className="text-lg font-semibold text-gray-700">
-              Total Projects Available: {projects.length}
-            </p>
-          </div>
-
-          <motion.button
-            onClick={handleGenerateReports}
-            className="w-full bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-800 transition-all"
-            disabled={loading}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            {loading ? <ClipLoader size={24} color="#ffffff" data-testid="clip-loader" /> : "Generate Report"}
-          </motion.button>
-
-          {chartData && ChartSection && (
-            <motion.div
-              id="chart-div"
-              className="mt-8"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <ChartSection chartData={chartData} />
-              <motion.button
-                onClick={handleDownloadPDF}
-                className="mt-4 w-full bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Download Report as PDF
-              </motion.button>
-            </motion.div>
-          )}
-        </div>
-
-        {reportResponse && (
-            <div className="mt-10 bg-gray-100 p-4 rounded-md overflow-x-auto text-sm text-gray-800">
-              <h2 className="font-bold text-lg mb-2">Debug Full Report Response:</h2>
-              <pre className="whitespace-pre-wrap break-words">
-                {JSON.stringify(reportResponse, null, 2)}
-              </pre>
+          {loading ? (
+            <div className="flex justify-center items-center h-48">
+              <ClipLoader size={36} color="#4A5568" data-testid="clip-loader" />
             </div>
-        )}
+          ) : !reportResponse?.report_data ? (
+            <div className="text-gray-600">No report data available.</div>
+          ) : !selectedProject ? (
+            <div className="text-gray-600">Select a project to view the report.</div>
+          ) : selectedProject.isLoading ? (<div className="flex justify-center items-center h-48">
+            <ClipLoader size={36} color="#4A5568" data-testid="clip-loader" />
+          </div>) : (
+            <div>
+              {/* PDF Download Button */}
+              <div className="mb-6">
+                <PDFDownloadButton
+                  reportResponse={reportResponse}
+                  selectedProject={selectedProject}
+                />
+              </div>
 
-      </main>
-      <Footer />
+              {/* Dashboard Charts Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {/* Smell Density Card */}
+                <SmellDensityCard selectedProject={selectedProject} />
+
+                {/* Bar Chart - Smells by Category */}
+                <ChartContainer
+                  title="Smells by Category"
+                  delay={0.2}
+                  data={smellDistributionData}
+                  render={(data: SmellDistribution[]) => (
+                    <Plot
+                      data={[{
+                        x: data.map(item => item.smell_name),
+                        y: data.map(item => item.count),
+                        type: "bar",
+                        marker: { color: "#007aff" }
+                      }]}
+                      layout={{
+                        title: { text: "Smell Distribution", font: { size: 16 } },
+                        margin: { t: 30, l: 50, b: 50, r: 30 }
+                      }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  )}
+                />
+
+                {/* Top Offenders (Files with most Smells) */}
+                <ChartContainer
+                  title="Top Offenders (Files)"
+                  delay={0.3}
+                  data={topOffendersData}
+                  render={(data: TopOffender[]) => (
+                    <Plot
+                      data={[{
+                        x: data.map(item => item.filename),
+                        y: data.map(item => typeof item.smell_count === 'number' ?
+                          item.smell_count : parseInt(String(item.smell_count), 10)),
+                        type: "bar",
+                        marker: { color: "#ff9500" }
+                      }]}
+                      layout={{
+                        title: { text: "Files with Most Smells", font: { size: 16 } },
+                        margin: { t: 30, l: 50, b: 50, r: 30 }
+                      }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  )}
+                />
+
+                {/* Top Functions (Functions with most Smells) */}
+                <ChartContainer
+                  title="Top Functions"
+                  delay={0.4}
+                  data={topFunctionsData}
+                  render={(data: TopFunction[]) => (
+                    <Plot
+                      data={[{
+                        x: data.map(item => item.function_name),
+                        y: data.map(item => typeof item.smell_count === 'number' ?
+                          item.smell_count : parseInt(String(item.smell_count), 10)),
+                        type: "bar",
+                        marker: { color: "#4cd964" }
+                      }]}
+                      layout={{
+                        title: { text: "Functions with Most Smells", font: { size: 16 } },
+                        margin: { t: 30, l: 50, b: 50, r: 30 }
+                      }}
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  )}
+                />
+
+                {/* Heatmap */}
+                <ChartContainer
+                  title="Smell Heatmap"
+                  delay={0.5}
+                  data={heatmapData}
+                  render={(data: HeatmapDataItem[]) => (
+                    <Plot
+                      data={[{
+                        z: data.map(item => typeof item.count === 'number' ?
+                          item.count : parseInt(String(item.count), 10)),
+                        x: [...new Set(data.map(item => item.filename))],
+                        y: [...new Set(data.map(item => item.smell_name))],
+                        type: "heatmap",
+                        colorscale: "Viridis"
+                      }]}
+                      layout={{
+                        title: { text: "Smell Heatmap by File", font: { size: 16 } },
+                        margin: { t: 30, l: 50, b: 50, r: 30 }
+                      }}
+                      style={{ width: "100%", height: "400px" }}
+                    />
+                  )}
+                />
+
+                {/* Stacked Bar Chart */}
+                <ChartContainer
+                  title="Smell Distribution by File"
+                  delay={0.6}
+                  data={stackedData}
+                  render={(data: StackedDataItem[]) => {
+                    // Process and group data by filename and smell_name
+                    const grouped = data.reduce((acc: Record<string, Record<string, number>>, item) => {
+                      if (!acc[item.filename]) acc[item.filename] = {};
+
+                      acc[item.filename][item.smell_name] = (acc[item.filename][item.smell_name] || 0) +
+                        (typeof item.count === 'number' ? item.count : parseInt(String(item.count), 10));
+
+                      return acc;
+                    }, {});
+
+                    // Convert to Plotly format
+                    const plotData: Plotly.Data[] = Object.entries(grouped).map(([filename, smells]) => ({
+                      x: Object.keys(smells),
+                      y: Object.values(smells),
+                      type: "bar",
+                      name: filename,
+                      stackgroup: "files"
+                    }));
+
+                    return (
+                      <Plot
+                        data={plotData}
+                        layout={{
+                          title: { text: "Smell Distribution by File", font: { size: 16 } },
+                          barmode: "stack",
+                          yaxis: { title: { text: "Smell Count", font: { size: 12 } } },
+                          xaxis: { title: { text: "Smell Type", font: { size: 12 } } },
+                          margin: { t: 30, l: 50, b: 50, r: 30 }
+                        }}
+                        style={{ width: "100%", height: "400px" }}
+                      />
+                    );
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
