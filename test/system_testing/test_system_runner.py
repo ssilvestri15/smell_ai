@@ -278,6 +278,58 @@ TEST_CASES = {
         "resume": False,
         "multiple": True,
     },
+
+    # ================ TC22 ================
+    "TC22": {
+        "expected_error": False,
+        "expected_smells": ">=1",
+        "description": "Quick Scan su file modificato => almeno uno smell atteso",
+        "parallel": False,
+        "max_walkers": 1,
+        "resume": False,
+        "multiple": False,
+        "quick_scan": True,
+        "commit_depth": 1
+    },
+
+    # ================ TC23 ================
+    "TC23": {
+        "expected_error": False,
+        "expected_smells": 0,
+        "description": "Quick Scan senza modifiche recenti => nessun file analizzato",
+        "parallel": False,
+        "max_walkers": 1,
+        "resume": False,
+        "multiple": False,
+        "quick_scan": True,
+        "commit_depth": 1
+    },
+
+    # ================ TC24 ================
+    "TC24": {
+        "expected_error": False,
+        "expected_smells": 0,
+        "description": "Quick Scan fallisce per repo senza branch main/master",
+        "parallel": False,
+        "max_walkers": 1,
+        "resume": False,
+        "multiple": False,
+        "quick_scan": True,
+        "commit_depth": 1
+    },
+
+    # ================ TC25 ================
+    "TC25": {
+        "expected_error": False,
+        "expected_smells": ">=2",
+        "description": "Quick Scan con commit_depth=3 => aggrega smell da più commit",
+        "parallel": False,
+        "max_walkers": 1,
+        "resume": False,
+        "multiple": False,
+        "quick_scan": True,
+        "commit_depth": 3
+    },
 }
 
 def list_test_cases():
@@ -324,6 +376,8 @@ def test_system_case(tc_dir):
     max_walkers = cfg.get("max_walkers", 5)
     resume = cfg.get("resume", False)
     multiple = cfg.get("multiple", False)
+    quick_scan = cfg.get("quick_scan", False)
+    commit_depth = cfg.get("commit_depth", 1)
 
     # 1) Pulizia/creazione cartella output
     output_dir = os.path.join(tc_path, "output")
@@ -344,6 +398,10 @@ def test_system_case(tc_dir):
         cmd.append("--resume")
     if multiple:
         cmd.append("--multiple")
+    if quick_scan:
+        cmd.append("--quick-scan")
+        cmd.append("--commit-depth")
+        cmd.append(str(commit_depth))
 
     # 3) Se va simulata un'interruzione, facciamolo qui e ritorniamo subito
     if cfg.get("simulate_interrupt", False):
@@ -366,6 +424,8 @@ def test_system_case(tc_dir):
 
     # 4) Esegui normalmente
     result = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"stdout: {result.stdout}")
+    print(f"stderr: {result.stderr}")
 
     # --- Ripristina i permessi per evitare problemi di cleanup ---
     for path in made_unreadable:
@@ -389,7 +449,10 @@ def test_system_case(tc_dir):
         )
 
         # Controlla se c'è `overview.csv` (tranne i casi di errore)
-        overview_path = os.path.join(output_dir, "output", "overview.csv")
+        if quick_scan:
+            overview_path = os.path.join(output_dir, "output", "project_details", "quickscan_results.csv")
+        else:
+            overview_path = os.path.join(output_dir, "output", "overview.csv")
 
         if expected_smells == 0:
             # Se ci si aspetta 0 smell, il file potrebbe non essere stato generato

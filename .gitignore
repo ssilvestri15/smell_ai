@@ -58,3 +58,8 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+
+/test/system_testing/TC22/
+/test/system_testing/TC23/
+/test/system_testing/TC24/
+/test/system_testing/TC25/
