@@ -1,0 +1,29 @@
+@startuml
+actor Developer
+participant "GitHub\nActions" as GitHub
+participant "CIExecutor\n(ci_executor.py)" as CIExecutor
+participant "CLI CodeSmile\n(code_smile.py)" as CLI
+participant "CIReportParser\n(ci_report_parser.py)" as Parser
+participant "GitHub\nIssues" as Issues
+
+Developer -> GitHub : push/pull request
+activate GitHub
+GitHub -> CIExecutor : trigger workflow (YAML)
+activate CIExecutor
+
+CIExecutor -> CLI : run CodeSmile --quick-scan
+activate CLI
+CLI --> CIExecutor : output.csv
+deactivate CLI
+
+CIExecutor -> Parser : parse output.csv
+activate Parser
+Parser -> Parser : genera markdown + metadati
+
+Parser -> Issues : crea issue con\nsummary smells
+deactivate Parser
+
+CIExecutor --> GitHub : job completato (success/fail)
+deactivate CIExecutor
+deactivate GitHub
+@enduml
