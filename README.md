@@ -1,259 +1,242 @@
-[![codecov](https://codecov.io/gh/matthew-2000/smell_ai/graph/badge.svg?token=KM7EH5L3XC)](https://codecov.io/gh/matthew-2000/smell_ai)
+# CodeSmile: Machine Learning-Specific Code Smell Detection Module
 
-<p align="center">
-  <img src="./code_smile_logo.png" alt="CodeSmile" width="200"/>
-</p>
+A lightweight Python module for detecting **machine learning-specific code smells** in Python projects. CodeSmile identifies suboptimal implementation patterns that impact the quality, maintainability, and performance of ML code through **Abstract Syntax Tree (AST)** parsing and rule-based analysis.
 
-# CodeSmile: Machine Learning-Specific Code Smell Detection Tool
+## Features
 
+- **16 ML-Specific Code Smells Detection**: Comprehensive analysis of common ML coding issues
+- **AST-Based Analysis**: Deep code structure analysis without executing code
+- **JSON Output**: Structured results for easy integration and processing
+- **Multi-Path Support**: Analyze single files, directories, or mixed paths
+- **Zero Configuration**: Works out of the box with sensible defaults
+- **Lightweight**: Minimal dependencies, focused on core functionality
 
-CodeSmile is a suite of tools designed to detect **machine learning-specific code smells** in Python projects. It identifies suboptimal implementation patterns that impact the quality, maintainability, and performance of ML code. The suite includes:
+## Installation
 
-1. **Static Analysis Tool**: Uses **Abstract Syntax Tree (AST)** parsing for rule-based detection of ML-specific code smells.
-2. **AI-Based Tool**: Leverages **LLMs** to detect code smells using a trained model.
-3. **Web Application**: Provides an interactive web-based interface to run both tools.
+### Option 1: Local Development Installation (Recommended)
 
-- Detects 12 machine learning-specific code smells, aiding in the identification of potential problems and areas for improvement.
-
-
-This tool is designed to aid developers and researchers in improving the quality of ML codebases.
-
-
-
-To install CodeSmile, clone the repository and execute the analyzer.py in controller folder.
-
-
-
-## Prerequisites
-- Python 3.11 is required.
-- Install the required packages by running:
 ```bash
-pip install -r requirements.txt
+git clone <repository-url>
+cd codesmile
+pip install -e .
 ```
 
----
+### Option 2: Direct Installation
 
-
-## 1. Static Analysis Tool
-
-The static analysis tool detects **ML-specific code smells** through rule-based AST analysis.
-
-### Features
-- **Static Code Analysis**: Identifies ML-specific code smells.
-- **Execution Modes**: Supports **CLI** for batch processing and an **interactive GUI**.
-- **Code Quality Insights**: Generates detailed reports on identified code smells, including location and remediation hints.
-
-### Code Smells Detected
-
-#### Generic Code Smells
-
-| **Name**                                | **Description**                                                            |
-| --------------------------------------- | -------------------------------------------------------------------------- |
-| Broadcasting Feature Not Used           | Tensor operations that fail to utilize TensorFlow's broadcasting feature.  |
-| Columns and DataType Not Explicitly Set | DataFrames created without explicitly setting column names and data types. |
-| Deterministic Algorithm Option Not Used | This smell occurs when the option `torch.use_deterministic_algorithms(True)` is not removed.|
-| Empty Column Misinitialization          | Initializing DataFrame columns with zeros or empty strings.                |
-| Hyperparameters Not Explicitly Set      | Missing explicit hyperparameter definitions for ML models.                 |
-| In-Place APIs Misused                   | Assuming Pandas methods modify DataFrames in-place without reassignment.   |
-| Memory Not Freed                        | Failing to free memory for ML models declared in loops.                    |
-| Merge API Parameter Not Explicitly Set  | Missing explicit `how` and `on` parameters in Pandas merge operations.     |
-| NaN Equivalence Comparison Misused      | Incorrect comparison of values with `np.nan`.                              |
-| Unnecessary Iteration                   | Using explicit loops instead of Pandas vectorized operations.              |
-
-#### AI-Specific Code Smells
-
-| **Name**                                | **Description**                                                                       |
-| --------------------------------------- | ------------------------------------------------------------------------------------- |
-| Chain Indexing                          | Inefficient use of chained indexing in Pandas DataFrames (`df["col"][0]`).            |
-| DataFrame Conversion API Misused        | Using `.values()` to convert Pandas DataFrames instead of `.to_numpy()`.              |
-| Gradients Not Cleared                   | Missing `optimizer.zero_grad()` before backward propagation in PyTorch.               |
-| Matrix Multiplication API Misused       | Misusing NumPy’s `np.dot()` for matrix multiplication.                                |
-| PyTorch Call Method Misused             | Direct use of `self.net.forward()` instead of calling `self.net()` in PyTorch.        |
-| TensorArray Not Used                    | Using `tf.constant()` inefficiently in loops instead of `tf.TensorArray()`.           |
-
-
-### Usage
-
-#### CLI
 ```bash
-python -m cli.cli_runner --input <input_directory> --output <output_directory> [OPTIONS]
+pip install codesmile
 ```
 
-##### CLI Options:
-- --input: Path to the input folder containing Python files. (Required)
-- --output: Path to the output folder where the analysis results will be saved. (Required)
-- --parallel: Enable parallel execution for faster analysis.
-- --max_walkers: Number of workers to use for parallel execution (default: 5). Only applicable if --parallel is enabled.
-- --resume: Resume a previous analysis from where it stopped.
-- --multiple: Analyze multiple projects within the input folder.
+## Quick Start
 
-#### GUI
-```bash
-python -m gui.gui_runner
-```
-
-### Testing
-The project includes a comprehensive suite of tests to ensure code quality and reliability. Specifically, the following types of tests have been implemented:
-
-- **Unit Tests:** Verify the functionality of individual functions and components.
-- **Integration Tests:** Check the interactions between various modules.
-- **System Tests:** Validate the overall behavior of the application.
-
-All tests are located in the test directory. 
-
----
-
-## 2. AI-Based Detection Tool
-
-The AI-based tool is an experimental feasibility study that investigates the use of **LLMs** for generating synthetic datasets and detecting ML-specific code smells.
-
-### Current Capabilities
-- **Single-label classification** of ML-specific code smells.
-- **Limited to detection**, without localization in code or suggested fixes due to hardware constraints.
-- **Performance Metrics:** 
-  - _Accuracy_: 94.46%
-  - _Average Precision, Recall and F1-score_: 95%
-
-### Dataset Generation
-To create the training dataset, we injected code smells into clean functions using **Qwen 2.5 Coder 14B** (via **Ollama**). The model used for detection was fine-tuned via **LoRA** on **Qwen 2.5 Coder 3B**.
-
-### Running the Fine-Tuned Model
-
-#### Using `unsloth`
-1. **Download the LoRA model directory** from **[this link](https://drive.google.com/drive/folders/1cEGbqr2qz019O8cifl9AfrjkI28H9y2c?usp=sharing)**.
-2. Extract the contents and use them with `unsloth`:
 ```python
-# Model configuration
-max_seq_length = 2048
-dtype = None  # Auto-detection
-load_in_4bit = True  # 4-bit quantization
+from codesmile import CodeSmileAnalyzer
+import json
 
-# Load pretrained model and tokenizer
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="finetuning/outputs/synthetic",
-    max_seq_length=max_seq_length,
-    dtype=dtype,
-    load_in_4bit=load_in_4bit,
-)
-FastLanguageModel.for_inference(model)
+# Initialize analyzer
+analyzer = CodeSmileAnalyzer()
 
-inputs = tokenizer.apply_chat_template(
-    user_message,
-    tokenize=True,
-    add_generation_prompt=True,
-    return_tensors="pt",
-).to(device)
+# Analyze a single file
+result = analyzer.analyze("my_ml_script.py")
+data = json.loads(result)
+print(f"Found {data['total_smells']} code smells")
 
-outputs = model.generate(
-    input_ids=inputs,
-    max_new_tokens=128,
-    use_cache=True,
-    temperature=1.5,
-    min_p=0.1,
-)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
+# Analyze multiple paths (files and directories)
+result = analyzer.analyze([
+    "src/models/neural_network.py",
+    "src/data_processing/",
+    "notebooks/analysis.py"
+])
+
+# Process results
+data = json.loads(result)
+for detection in data['detections']:
+    print(f"{detection['smell_name']} in {detection['filename']}:{detection['line']}")
 ```
-> **Note**: This step works only on **Linux**.
 
-#### Using `Ollama`
-1. **Download the `.gguf` model file and `Modelfile`** from **[this link](https://drive.google.com/drive/folders/1-ym-jXBu1QHRUXmsb3Hvxd_nDYun91sm?usp=sharing)**.
-2. Open `Modelfile` and update the first line with the **absolute path** of the `.gguf` model.
-3. Run:
-   ```bash
-   ollama create codesmile -f <Modelfile_location>
-   ```
-4. The model will now be available in Ollama for inference.
+## Detected Code Smells
 
----
+CodeSmile detects **16 different ML-specific code smells** organized into two categories:
 
-## 3. Web Application
-We have also developed a **web-based application** to provide an interface for executing both tools interactively.
+### API-Specific Code Smells
 
-For detailed instructions and further information, visit: **[this link](https://github.com/xDaryamo/smell_ai/tree/main/webapp)**.
+| **Smell Name** | **Description** |
+|---|---|
+| **Chain Indexing** | Inefficient use of chained indexing in Pandas DataFrames (`df["col"][0]`) |
+| **DataFrame Conversion API Misused** | Using deprecated `.values` instead of `.to_numpy()` for DataFrame conversion |
+| **Gradients Not Cleared** | Missing `optimizer.zero_grad()` before backward propagation in PyTorch |
+| **Matrix Multiplication API Misused** | Misusing NumPy's `np.dot()` for matrix multiplication instead of `@` or `np.matmul()` |
+| **PyTorch Call Method Misused** | Direct use of `self.net.forward()` instead of calling `self.net()` in PyTorch |
+| **TensorArray Not Used** | Using `tf.constant()` inefficiently in loops instead of `tf.TensorArray()` |
 
----
+### Generic Code Smells
 
-# CodeSmile GitHub Action
+| **Smell Name** | **Description** |
+|---|---|
+| **Broadcasting Feature Not Used** | Tensor operations that fail to utilize TensorFlow's broadcasting feature |
+| **Columns and DataType Not Explicitly Set** | DataFrames created without explicitly setting column names and data types |
+| **Deterministic Algorithm Option Not Used** | Unnecessary use of `torch.use_deterministic_algorithms(True)` |
+| **Empty Column Misinitialization** | Initializing DataFrame columns with zeros or empty strings instead of NaN |
+| **Hyperparameters Not Explicitly Set** | Missing explicit hyperparameter definitions for ML models |
+| **In-Place APIs Misused** | Incorrect assumptions about Pandas in-place operations |
+| **Memory Not Freed** | Failing to free memory for ML models declared in loops |
+| **Merge API Parameter Not Explicitly Set** | Missing explicit `how` and `on` parameters in Pandas merge operations |
+| **NaN Equivalence Comparison Misused** | Incorrect comparison of DataFrame values with `np.nan` |
+| **Unnecessary Iteration** | Using explicit loops instead of Pandas vectorized operations |
 
-This repository provides a public GitHub Action that integrates **CodeSmile**. It automatically detects potential issues and creates GitHub Issues for review.
+## Usage Examples
 
-## How to Integrate the Action
+### Basic Analysis
 
-1. **Add the Action to Your Workflow**
+```python
+from codesmile import CodeSmileAnalyzer
+import json
 
-   Create a `.github/workflows/code_smile.yml` file with the following content:
+analyzer = CodeSmileAnalyzer()
 
-   ```yaml
-   name: CodeSmile Analysis
+# Single file analysis
+result = analyzer.analyze("src/model_training.py")
+data = json.loads(result)
 
-   jobs:
-    analyze-smells:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Run CodeSmile Action
-        - uses: actions/checkout@v4
-        - uses: matthew-2000/smell_ai@main  # ← Important!
-          with:
-            quickscan: true           # Run quick scan, analyzes only modified files
-            commit-depth: 1           # Limit the number of commits to analyze
-   ```
+print(f"📊 Analysis Results:")
+print(f"   Total issues: {data['total_smells']}")
+print(f"   Files analyzed: {len(data['smells_by_file'])}")
+print(f"   Issue types: {len(data['smells_by_type'])}")
+```
 
-2. **Action Configuration Options**
+### Detailed Issue Processing
 
-   - `quickscan` (default: `true`):
-    - `true`: Runs a quick scan of modified `.py` files, analyzing only the files edited in the last `commit-depth` number of commits.
-    - `false`: Analyzes all `.py` files in the project.
-   - `commit-depth` (default: `1`): Depth of commits to analyze.
+```python
+result = analyzer.analyze("src/")
+data = json.loads(result)
 
-3. **Issue Creation**
+# Group issues by type
+for smell_type, count in data['smells_by_type'].items():
+    print(f"{smell_type}: {count} occurrences")
 
-   If code smells are detected, an issue will be created with:
-   - A summary of detected smells.
-   - A markdown table with details on the affected files and lines.
+# Show detailed information for each issue
+for detection in data['detections']:
+    print(f"""
+    📁 File: {detection['filename']}
+    🔧 Function: {detection['function_name']}
+    ⚠️  Issue: {detection['smell_name']}
+    📍 Line: {detection['line']}
+    💡 Details: {detection['additional_info']}
+    """)
+```
 
----
+### Multi-Path Analysis
 
-## Acknowledgments
+```python
+# Analyze mixed paths: files and directories
+paths = [
+    "src/models/",              # Directory
+    "notebooks/analysis.py",    # Single file
+    "utils/data_processing/",   # Another directory
+    "main.py"                   # Root file
+]
+
+result = analyzer.analyze(paths)
+data = json.loads(result)
+
+# Show results by file
+for filename, count in data['smells_by_file'].items():
+    print(f"{filename}: {count} issues")
+```
+
+## Output Format
+
+The analysis returns a JSON string with the following structure:
+
+```json
+{
+  "total_smells": 12,
+  "smells_by_file": {
+    "src/model.py": 5,
+    "src/training.py": 3,
+    "src/data_loader.py": 4
+  },
+  "smells_by_type": {
+    "hyperparameters_not_explicitly_set": 4,
+    "gradients_not_cleared_before_backward_propagation": 2,
+    "unnecessary_iteration": 3,
+    "Chain_Indexing": 2,
+    "memory_not_freed": 1
+  },
+  "detections": [
+    {
+      "filename": "src/model.py",
+      "function_name": "train_model",
+      "smell_name": "hyperparameters_not_explicitly_set",
+      "line": 25,
+      "description": "Hyperparameters should be explicitly set when defining models to ensure clarity and reproducibility.",
+      "additional_info": "Hyperparameters not explicitly set for model 'RandomForestClassifier'. Consider defining key hyperparameters for clarity."
+    }
+  ]
+}
+```
+
+## Requirements
+
+- **Python**: 3.8 or higher
+- **Dependencies**: 
+  - `pandas >= 1.3.0`
+  - `numpy >= 1.20.0`
+
+## Architecture
+
+CodeSmile follows a modular architecture:
+
+```
+codesmile/
+├── analyzer.py              # Main API interface
+├── components/
+│   ├── inspector.py         # Core AST analysis engine
+│   └── rule_checker.py      # Rule application logic
+├── code_extractor/          # AST information extractors
+│   ├── library_extractor.py
+│   ├── model_extractor.py
+│   ├── dataframe_extractor.py
+│   └── variable_extractor.py
+├── detection_rules/         # Smell detection implementations
+│   ├── api_specific/        # Framework-specific rules
+│   └── generic/             # General ML code rules
+└── resources/               # Configuration files
+    ├── models.csv
+    ├── dataframes.csv
+    └── tensors.csv
+```
+
+## Contributing
+
 This project builds on the research presented in:
 **"When Code Smells Meet ML: On the Lifecycle of ML-Specific Code Smells in ML-Enabled Systems"**
-- Authors: *[Gilberto Recupito](https://github.com/gilbertrec), [Giammaria Giordano](https://github.com/giammariagiordano), [Filomena Ferrucci](https://docenti.unisa.it/001775/en/home), [Dario Di Nucci](https://github.com/dardin88), [Fabio Palomba](https://github.com/fpalomba)*  
-- [Read the full paper](https://arxiv.org/abs/2403.08311) and [appendix](https://figshare.com/articles/online_resource/When_Code_Smells_Meet_ML_On_the_Lifecycle_of_ML-specific_Code_Smells_in_ML-enabled_Systems_-_Appendix/25231817?file=44582128)
 
-Improvements and development were carried out by **[Dario Mazza](https://github.com/xDaryamo)** and **[Nicolò Delogu](https://github.com/XJustUnluckyX)** as part of the *Software Engineering: Management and Evolution* and _Software Engineering for AI_ courses in the Master's Degree program in Computer Science.
+- **Original Authors**: *Gilberto Recupito, Giammaria Giordano, Filomena Ferrucci, Dario Di Nucci, Fabio Palomba*
+- **Forked Version Authors**: Matteo Ercolino, Simone Silvestri
+- **Paper**: [arXiv:2403.08311](https://arxiv.org/abs/2403.08311)
+- **Appendix**: [Figshare](https://figshare.com/articles/online_resource/When_Code_Smells_Meet_ML_On_the_Lifecycle_of_ML-specific_Code_Smells_in_ML-enabled_Systems_-_Appendix/25231817?file=44582128)
 
+Light version by **Simone Silvestri**.
 
+## License
 
+MIT License - see LICENSE file for details.
 
+## Changelog
 
+### Version 1.0.0
+- ✅ Lightweight module version extracted from full CLI tool
+- ✅ 16 ML-specific code smell detectors
+- ✅ JSON output format for easy integration
+- ✅ Multi-path analysis support
+- ✅ Zero-configuration setup
+- ✅ Comprehensive documentation and examples
 
+---
 
+**CodeSmile** helps you maintain high-quality machine learning code by automatically detecting and reporting common ML-specific antipatterns. Happy coding! 🚀
 
+--
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Made with ❤️ by **Simone Silvestri**
