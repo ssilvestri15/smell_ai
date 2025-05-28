@@ -48,8 +48,6 @@ class Inspector:
         # Initialize Python 2 parser using lib2to3
         if HAS_LIB2TO3:
             self._init_lib2to3_parser()
-        else:
-            print("lib2to3 not available - Python 2 files will use conversion fallback")
 
     def inspect(self, filename: str) -> pd.DataFrame:
         """
@@ -77,8 +75,8 @@ class Inspector:
             with open(file_path, "r", encoding="utf-8") as file:
                 source = file.read()
 
-            # Parse the file into an AST using lib2to3 for Python 2 or ast for Python 3
-            tree = self._parse_with_lib2to3_detection(source, filename)
+            # Parse the file into an AST with cascading fallback approach
+            tree = self._parse_with_cascading_fallback(source, filename)
             lines = source.splitlines()
 
             # Step 1: Extract Libraries
@@ -165,9 +163,12 @@ class Inspector:
             self.py2_driver = driver.Driver(pygram.python_grammar, convert=pytree.convert)
             print("lib2to3 Python 2 parser initialized")
 
-    def _parse_with_lib2to3_detection(self, source: str, filename: str):
+    def _parse_with_cascading_fallback(self, source: str, filename: str):
         """
-        Parse source code using lib2to3 for Python 2 or ast for Python 3.
+        Parse source code with cascading fallback approach:
+        1. Try Python 3 (ast.parse)
+        2. If fails, try Python 2 (lib2to3)
+        3. If fails, use syntax conversion fallback
         
         Parameters:
         - source (str): The source code content
@@ -176,39 +177,44 @@ class Inspector:
         Returns:
         - ast.AST: The parsed AST tree
         """
-        # Detect if this is Python 2 code
-        is_python2 = self._detect_python2_code(source, filename)
-        
-        if is_python2:
-            print(f"Detected Python 2 code in {filename}")
+        # Step 1: Try Python 3 parsing first
+        try:
+            print(f"Trying Python 3 parsing for {filename}")
+            return ast.parse(source, filename=filename)
+        except SyntaxError as py3_error:
+            print(f"Python 3 parsing failed for {filename}: {py3_error}")
             
+            # Step 2: Try lib2to3 for Python 2
             if HAS_LIB2TO3:
                 try:
-                    print(f"Parsing {filename} with lib2to3 Python 2 parser")
+                    print(f"Trying lib2to3 Python 2 parsing for {filename}")
                     
                     # Parse with lib2to3
-                    py2_tree = self.py2_driver.parse_string(source + '\n')  # lib2to3 sometimes needs trailing newline
+                    py2_tree = self.py2_driver.parse_string(source + '\n')
                     
                     # Convert lib2to3 parse tree to Python 3 compatible source
                     python3_source = self._convert_lib2to3_tree_to_python3(py2_tree, source)
                     
                     # Parse the converted source with standard ast
+                    print(f"Successfully converted Python 2 to Python 3 for {filename}")
                     return ast.parse(python3_source, filename=filename)
                     
-                except ParseError as e:
-                    print(f"lib2to3 parsing failed for {filename}: {e}")
-                    print("Falling back to syntax conversion")
-                    return self._parse_with_conversion_fallback(source, filename)
-                except Exception as e:
-                    print(f"lib2to3 conversion failed for {filename}: {e}")
-                    print("Falling back to syntax conversion")
-                    return self._parse_with_conversion_fallback(source, filename)
+                except ParseError as lib2to3_error:
+                    print(f"lib2to3 parsing failed for {filename}: {lib2to3_error}")
+                except Exception as lib2to3_error:
+                    print(f"lib2to3 conversion failed for {filename}: {lib2to3_error}")
             else:
-                print(f"lib2to3 not available, using conversion fallback for {filename}")
-                return self._parse_with_conversion_fallback(source, filename)
-        else:
-            # Parse as Python 3
-            return ast.parse(source, filename=filename)
+                print(f"lib2to3 not available for {filename}")
+            
+            # Step 3: Use syntax conversion fallback
+            try:
+                print(f"Using syntax conversion fallback for {filename}")
+                source_converted = self._convert_python2_syntax(source)
+                return ast.parse(source_converted, filename=filename)
+            except SyntaxError as fallback_error:
+                print(f"All parsing methods failed for {filename}")
+                # Re-raise the original Python 3 error for better debugging
+                raise py3_error
 
     def _convert_lib2to3_tree_to_python3(self, py2_tree, original_source: str) -> str:
         """
@@ -227,107 +233,6 @@ class Inspector:
         # Since lib2to3 successfully parsed it as Python 2, we know it's valid Python 2
         # Apply our conversion rules with confidence
         return self._convert_python2_syntax(original_source)
-
-    def _parse_with_conversion_fallback(self, source: str, filename: str):
-        """Fallback method using syntax conversion."""
-        print(f"Using syntax conversion fallback for {filename}")
-        source_converted = self._convert_python2_syntax(source)
-        return ast.parse(source_converted, filename=filename)
-
-    def _detect_python2_code(self, source: str, filename: str) -> bool:
-        """
-        Detect if source code is Python 2 based on various indicators.
-        
-        Parameters:
-        - source (str): The source code content
-        - filename (str): The filename for additional context
-        
-        Returns:
-        - bool: True if the code appears to be Python 2
-        """
-        # First, try to parse as Python 3 - if it succeeds, it's likely Python 3
-        try:
-            ast.parse(source, filename=filename)
-            # If parsing as Python 3 succeeds, check for definitive Python 2 indicators
-            # Only return True if we find strong Python 2 evidence
-            return self._has_definitive_python2_syntax(source)
-        except SyntaxError:
-            # If Python 3 parsing fails, it might be Python 2
-            return self._has_python2_indicators(source)
-
-    def _has_definitive_python2_syntax(self, source: str) -> bool:
-        """
-        Check for definitive Python 2 syntax that would NOT work in Python 3.
-        
-        Parameters:
-        - source (str): The source code content
-        
-        Returns:
-        - bool: True if definitive Python 2 syntax is found
-        """
-        # Check shebang line for python2 indicators
-        first_line = source.split('\n')[0] if source else ""
-        if re.match(r'#!/.*python2', first_line):
-            return True
-        
-        # Definitive Python 2 patterns that would cause syntax errors in Python 3
-        definitive_python2_patterns = [
-            r'\bprint\s+(?!\()',             # print statement (not function call)
-            r'\bexcept\s+[^,]+,\s*[^:]+:',   # except Exception, e: syntax
-            r'lambda\s+\([^)]+\)\s*:',       # lambda tuple unpacking
-            r'\braw_input\s*\(',             # raw_input function
-            r'\.iteritems\(\)',              # dict.iteritems()
-            r'\.iterkeys\(\)',               # dict.iterkeys()  
-            r'\.itervalues\(\)',             # dict.itervalues()
-            r'\bxrange\s*\(',                # xrange function
-            r'import\s+urllib2\b',           # urllib2 import
-            r'\bexecfile\s*\(',              # execfile function
-            r'\bbasestring\b',               # basestring type
-            r'\bunicode\s*\(',               # unicode function
-            r'from\s+__future__\s+import\s+print_function',  # future import for print
-        ]
-        
-        # Count matches - need multiple strong indicators
-        matches = sum(1 for pattern in definitive_python2_patterns 
-                      if re.search(pattern, source))
-        
-        # Only consider it Python 2 if we find multiple definitive indicators
-        return matches >= 2
-
-    def _has_python2_indicators(self, source: str) -> bool:
-        """
-        Check for Python 2 indicators when Python 3 parsing failed.
-        
-        Parameters:
-        - source (str): The source code content
-        
-        Returns:
-        - bool: True if Python 2 indicators are found
-        """
-        # Check shebang line for python2 indicators
-        first_line = source.split('\n')[0] if source else ""
-        if re.match(r'#!/.*python2', first_line):
-            return True
-        
-        # Python 2 indicators (less strict since Python 3 parsing failed)
-        python2_indicators = [
-            r'\bprint\s+(?!\()',             # print statement
-            r'\bexcept\s+[^,]+,\s*[^:]+:',   # except Exception, e: syntax
-            r'lambda\s+\([^)]+\)\s*:',       # lambda tuple unpacking
-            r'\.iteritems\(\)',              # dict.iteritems()
-            r'\.iterkeys\(\)',               # dict.iterkeys()  
-            r'\.itervalues\(\)',             # dict.itervalues()
-            r'\bxrange\s*\(',                # xrange function
-            r'from\s+__future__\s+import',   # future imports
-            r'import\s+urllib2\b',           # urllib2 import
-            r'\braw_input\s*\(',             # raw_input function
-        ]
-        
-        # Count matches
-        matches = sum(1 for pattern in python2_indicators if re.search(pattern, source))
-        
-        # Consider it Python 2 if we find indicators and Python 3 parsing failed
-        return matches >= 1
 
     def _convert_python2_syntax(self, source: str) -> str:
         """
