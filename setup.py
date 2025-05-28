@@ -11,10 +11,13 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    python_requires=">=3.8",
+    python_requires=">=3.11.10",
     install_requires=[
-        "pandas>=1.3.0",
-        "numpy>=1.20.0",
+        "pandas>=2.0.0",
+        "numpy>=1.24.0",
+        "GitPython>=3.1.31",
+        "matplotlib>=3.6.0",
+        "openpyxl>=3.1.0",
     ],
     include_package_data=True,
     package_data={
