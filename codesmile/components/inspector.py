@@ -245,47 +245,90 @@ class Inspector:
         Returns:
         - bool: True if the code appears to be Python 2
         """
-        # Check shebang line for python2 indicators
-        first_line = source.split('\n')[0] if source else ""
-        if re.match(r'#!/.*python2', first_line):
-            return True
-        
-        # Check for definitive Python 2 syntax patterns
-        python2_indicators = [
-            r'\bprint\s+[^(]',           # print statement without parentheses
-            r'\.iteritems\(\)',          # dict.iteritems()
-            r'\.iterkeys\(\)',           # dict.iterkeys()  
-            r'\.itervalues\(\)',         # dict.itervalues()
-            r'\bxrange\s*\(',            # xrange function
-            r'from\s+__future__\s+import', # future imports
-            r'\bexcept\s+[^,]+,\s*[^:]+:', # except Exception, e: syntax
-            r'import\s+urllib2\b',       # urllib2 import
-            r'lambda\s+\([^)]+\)\s*:',   # lambda tuple unpacking
-        ]
-        
-        # Count matches
-        matches = sum(1 for pattern in python2_indicators if re.search(pattern, source))
-        
-        # Consider it Python 2 if we find 2 or more indicators
-        return matches >= 2
+        # First, try to parse as Python 3 - if it succeeds, it's likely Python 3
+        try:
+            ast.parse(source, filename=filename)
+            # If parsing as Python 3 succeeds, check for definitive Python 2 indicators
+            # Only return True if we find strong Python 2 evidence
+            return self._has_definitive_python2_syntax(source)
+        except SyntaxError:
+            # If Python 3 parsing fails, it might be Python 2
+            return self._has_python2_indicators(source)
 
-    def _convert_python2_syntax(self, source: str) -> str:
+    def _has_definitive_python2_syntax(self, source: str) -> bool:
         """
-        Convert basic Python 2 syntax to Python 3 for AST parsing.
+        Check for definitive Python 2 syntax that would NOT work in Python 3.
         
         Parameters:
         - source (str): The source code content
         
         Returns:
-        - str: Source code with basic Python 2 to 3 conversions
+        - bool: True if definitive Python 2 syntax is found
         """
-        # Convert print statements to print functions
-        # Handle various print statement formats
-        source = re.sub(r'\bprint\s+([^(].*?)(?=\n|$)', r'print(\1)', source, flags=re.MULTILINE)
+        # Check shebang line for python2 indicators
+        first_line = source.split('\n')[0] if source else ""
+        if re.match(r'#!/.*python2', first_line):
+            return True
         
-        # Convert exception syntax: except Exception, e: -> except Exception as e:
-        source = re.sub(r'\bexcept\s+([^,]+),\s*([^:]+):', r'except \1 as \2:', source)
+        # Definitive Python 2 patterns that would cause syntax errors in Python 3
+        definitive_python2_patterns = [
+            r'\bprint\s+(?!\()',             # print statement (not function call)
+            r'\bexcept\s+[^,]+,\s*[^:]+:',   # except Exception, e: syntax
+            r'lambda\s+\([^)]+\)\s*:',       # lambda tuple unpacking
+            r'\braw_input\s*\(',             # raw_input function
+            r'\.iteritems\(\)',              # dict.iteritems()
+            r'\.iterkeys\(\)',               # dict.iterkeys()  
+            r'\.itervalues\(\)',             # dict.itervalues()
+            r'\bxrange\s*\(',                # xrange function
+            r'import\s+urllib2\b',           # urllib2 import
+            r'\bexecfile\s*\(',              # execfile function
+            r'\bbasestring\b',               # basestring type
+            r'\bunicode\s*\(',               # unicode function
+            r'from\s+__future__\s+import\s+print_function',  # future import for print
+        ]
         
+        # Count matches - need multiple strong indicators
+        matches = sum(1 for pattern in definitive_python2_patterns 
+                      if re.search(pattern, source))
+        
+        # Only consider it Python 2 if we find multiple definitive indicators
+        return matches >= 2
+
+    def _has_python2_indicators(self, source: str) -> bool:
+        """
+        Check for Python 2 indicators when Python 3 parsing failed.
+        
+        Parameters:
+        - source (str): The source code content
+        
+        Returns:
+        - bool: True if Python 2 indicators are found
+        """
+        # Check shebang line for python2 indicators
+        first_line = source.split('\n')[0] if source else ""
+        if re.match(r'#!/.*python2', first_line):
+            return True
+        
+        # Python 2 indicators (less strict since Python 3 parsing failed)
+        python2_indicators = [
+            r'\bprint\s+(?!\()',             # print statement
+            r'\bexcept\s+[^,]+,\s*[^:]+:',   # except Exception, e: syntax
+            r'lambda\s+\([^)]+\)\s*:',       # lambda tuple unpacking
+            r'\.iteritems\(\)',              # dict.iteritems()
+            r'\.iterkeys\(\)',               # dict.iterkeys()  
+            r'\.itervalues\(\)',             # dict.itervalues()
+            r'\bxrange\s*\(',                # xrange function
+            r'from\s+__future__\s+import',   # future imports
+            r'import\s+urllib2\b',           # urllib2 import
+            r'\braw_input\s*\(',             # raw_input function
+        ]
+        
+        # Count matches
+        matches = sum(1 for pattern in python2_indicators if re.search(pattern, source))
+        
+        # Consider it Python 2 if we find indicators and Python 3 parsing failed
+        return matches >= 1
+
     def _convert_python2_syntax(self, source: str) -> str:
         """
         Convert basic Python 2 syntax to Python 3 for AST parsing.
@@ -332,30 +375,6 @@ class Inspector:
         source = source.replace('raw_input(', 'input(')
         
         return source
-
-    def _convert_lambda_tuple_unpacking(self, match):
-        """
-        Convert lambda tuple unpacking from Python 2 to Python 3 syntax.
-        
-        Parameters:
-        - match: regex match object for lambda (params):
-        
-        Returns:
-        - str: Converted lambda expression
-        """
-        params = match.group(1).strip()
-        
-        # For simple cases like (a, b), convert to lambda x: with x[0], x[1] substitution
-        if ',' in params:
-            # Simple tuple unpacking case
-            param_names = [p.strip() for p in params.split(',')]
-            if len(param_names) == 2 and all(p.isidentifier() for p in param_names):
-                # Convert lambda (a, b): b to lambda x: x[1]
-                new_param = 'tuple_param'
-                return f'lambda {new_param}:'
-        
-        # Fallback: just remove parentheses for simple cases
-        return f'lambda {params}:'
 
     def _setup(
         self,
