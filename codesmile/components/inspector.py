@@ -1,6 +1,7 @@
 import os
 import ast
 import pandas as pd
+import re
 from ..code_extractor.library_extractor import LibraryExtractor
 from ..code_extractor.model_extractor import ModelExtractor
 from ..code_extractor.dataframe_extractor import DataFrameExtractor
@@ -60,8 +61,8 @@ class Inspector:
             with open(file_path, "r", encoding="utf-8") as file:
                 source = file.read()
 
-            # Parse the file into an AST
-            tree = ast.parse(source)
+            # Parse the file into an AST with appropriate Python version handling
+            tree = self._parse_with_version_detection(source, filename)
             lines = source.splitlines()
 
             # Step 1: Extract Libraries
@@ -140,6 +141,99 @@ class Inspector:
             raise e
 
         return to_save
+
+    def _parse_with_version_detection(self, source: str, filename: str):
+        """
+        Parse source code with automatic Python version detection.
+        
+        Parameters:
+        - source (str): The source code content
+        - filename (str): The filename for context
+        
+        Returns:
+        - ast.AST: The parsed AST tree
+        """
+        # First, try to determine if this is Python 2 code
+        is_python2 = self._detect_python2_code(source, filename)
+        
+        if is_python2:
+            print(f"Detected Python 2 code in {filename}, parsing with Python 2 compatibility")
+            
+            # Try parsing with Python 2 compatibility mode
+            # Note: This converts Python 2 print statements to Python 3 format for AST parsing
+            source_converted = self._convert_python2_syntax(source)
+            
+            try:
+                return ast.parse(source_converted, filename=filename)
+            except SyntaxError:
+                # If conversion failed, try original source with Python 3 parser
+                print(f"Python 2 conversion failed for {filename}, trying as Python 3")
+                return ast.parse(source, filename=filename)
+        else:
+            # Parse as Python 3
+            return ast.parse(source, filename=filename)
+
+    def _detect_python2_code(self, source: str, filename: str) -> bool:
+        """
+        Detect if source code is Python 2 based on various indicators.
+        
+        Parameters:
+        - source (str): The source code content
+        - filename (str): The filename for additional context
+        
+        Returns:
+        - bool: True if the code appears to be Python 2
+        """
+        # Check shebang line for python2 indicators
+        first_line = source.split('\n')[0] if source else ""
+        if re.match(r'#!/.*python2', first_line):
+            return True
+        
+        # Check for definitive Python 2 syntax patterns
+        python2_indicators = [
+            r'\bprint\s+[^(]',           # print statement without parentheses
+            r'\.iteritems\(\)',          # dict.iteritems()
+            r'\.iterkeys\(\)',           # dict.iterkeys()  
+            r'\.itervalues\(\)',         # dict.itervalues()
+            r'\bxrange\s*\(',            # xrange function
+            r'from\s+__future__\s+import', # future imports
+        ]
+        
+        # Count matches
+        matches = sum(1 for pattern in python2_indicators if re.search(pattern, source))
+        
+        # Consider it Python 2 if we find 2 or more indicators
+        return matches >= 2
+
+    def _convert_python2_syntax(self, source: str) -> str:
+        """
+        Convert basic Python 2 syntax to Python 3 for AST parsing.
+        
+        Parameters:
+        - source (str): The source code content
+        
+        Returns:
+        - str: Source code with basic Python 2 to 3 conversions
+        """
+        # Convert print statements to print functions
+        # This regex handles: print "hello" -> print("hello")
+        #                    print var -> print(var)  
+        #                    print func() -> print(func())
+        source = re.sub(r'\bprint\s+([^(].*?)(?=\n|$)', r'print(\1)', source, flags=re.MULTILINE)
+        
+        # Convert xrange to range
+        source = source.replace('xrange(', 'range(')
+        
+        # Convert dict iteration methods
+        source = source.replace('.iteritems()', '.items()')
+        source = source.replace('.iterkeys()', '.keys()')
+        source = source.replace('.itervalues()', '.values()')
+        
+        # Handle unicode literals - remove u prefix
+        source = re.sub(r'\bu["\']', '"', source)
+        source = re.sub(r'\bu["\']', "'", source)
+        
+        return source
 
     def _setup(
         self,
