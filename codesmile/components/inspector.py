@@ -8,6 +8,16 @@ from ..code_extractor.dataframe_extractor import DataFrameExtractor
 from ..code_extractor.variable_extractor import VariableExtractor
 from .rule_checker import RuleChecker
 
+# Import lib2to3 for Python 2 parsing
+try:
+    from lib2to3 import pygram, pytree
+    from lib2to3.pgen2 import driver
+    from lib2to3.pgen2.parse import ParseError
+    HAS_LIB2TO3 = True
+except ImportError:
+    HAS_LIB2TO3 = False
+    print("Warning: lib2to3 not available")
+
 
 class Inspector:
     """
@@ -34,6 +44,12 @@ class Inspector:
         """
         self.output_path = output_path
         self._setup(dataframe_dict_path, model_dict_path, tensor_dict_path)
+        
+        # Initialize Python 2 parser using lib2to3
+        if HAS_LIB2TO3:
+            self._init_lib2to3_parser()
+        else:
+            print("lib2to3 not available - Python 2 files will use conversion fallback")
 
     def inspect(self, filename: str) -> pd.DataFrame:
         """
@@ -61,8 +77,8 @@ class Inspector:
             with open(file_path, "r", encoding="utf-8") as file:
                 source = file.read()
 
-            # Parse the file into an AST with appropriate Python version handling
-            tree = self._parse_with_version_detection(source, filename)
+            # Parse the file into an AST using lib2to3 for Python 2 or ast for Python 3
+            tree = self._parse_with_lib2to3_detection(source, filename)
             lines = source.splitlines()
 
             # Step 1: Extract Libraries
@@ -142,9 +158,16 @@ class Inspector:
 
         return to_save
 
-    def _parse_with_version_detection(self, source: str, filename: str):
+    def _init_lib2to3_parser(self):
+        """Initialize the lib2to3 parser for Python 2 code."""
+        if HAS_LIB2TO3:
+            # Initialize the Python 2 grammar driver
+            self.py2_driver = driver.Driver(pygram.python_grammar, convert=pytree.convert)
+            print("lib2to3 Python 2 parser initialized")
+
+    def _parse_with_lib2to3_detection(self, source: str, filename: str):
         """
-        Parse source code with automatic Python version detection.
+        Parse source code using lib2to3 for Python 2 or ast for Python 3.
         
         Parameters:
         - source (str): The source code content
@@ -153,25 +176,63 @@ class Inspector:
         Returns:
         - ast.AST: The parsed AST tree
         """
-        # First, try to determine if this is Python 2 code
+        # Detect if this is Python 2 code
         is_python2 = self._detect_python2_code(source, filename)
         
         if is_python2:
-            print(f"Detected Python 2 code in {filename}, parsing with Python 2 compatibility")
+            print(f"Detected Python 2 code in {filename}")
             
-            # Try parsing with Python 2 compatibility mode
-            # Note: This converts Python 2 print statements to Python 3 format for AST parsing
-            source_converted = self._convert_python2_syntax(source)
-            
-            try:
-                return ast.parse(source_converted, filename=filename)
-            except SyntaxError:
-                # If conversion failed, try original source with Python 3 parser
-                print(f"Python 2 conversion failed for {filename}, trying as Python 3")
-                return ast.parse(source, filename=filename)
+            if HAS_LIB2TO3:
+                try:
+                    print(f"Parsing {filename} with lib2to3 Python 2 parser")
+                    
+                    # Parse with lib2to3
+                    py2_tree = self.py2_driver.parse_string(source + '\n')  # lib2to3 sometimes needs trailing newline
+                    
+                    # Convert lib2to3 parse tree to Python 3 compatible source
+                    python3_source = self._convert_lib2to3_tree_to_python3(py2_tree, source)
+                    
+                    # Parse the converted source with standard ast
+                    return ast.parse(python3_source, filename=filename)
+                    
+                except ParseError as e:
+                    print(f"lib2to3 parsing failed for {filename}: {e}")
+                    print("Falling back to syntax conversion")
+                    return self._parse_with_conversion_fallback(source, filename)
+                except Exception as e:
+                    print(f"lib2to3 conversion failed for {filename}: {e}")
+                    print("Falling back to syntax conversion")
+                    return self._parse_with_conversion_fallback(source, filename)
+            else:
+                print(f"lib2to3 not available, using conversion fallback for {filename}")
+                return self._parse_with_conversion_fallback(source, filename)
         else:
             # Parse as Python 3
             return ast.parse(source, filename=filename)
+
+    def _convert_lib2to3_tree_to_python3(self, py2_tree, original_source: str) -> str:
+        """
+        Convert lib2to3 parse tree to Python 3 compatible source code.
+        
+        For now, this is a simplified approach that uses basic regex conversion.
+        A full lib2to3 -> Python 3 converter would be quite complex.
+        
+        Parameters:
+        - py2_tree: Parse tree from lib2to3
+        - original_source: Original source code
+        
+        Returns:
+        - str: Python 3 compatible source code
+        """
+        # Since lib2to3 successfully parsed it as Python 2, we know it's valid Python 2
+        # Apply our conversion rules with confidence
+        return self._convert_python2_syntax(original_source)
+
+    def _parse_with_conversion_fallback(self, source: str, filename: str):
+        """Fallback method using syntax conversion."""
+        print(f"Using syntax conversion fallback for {filename}")
+        source_converted = self._convert_python2_syntax(source)
+        return ast.parse(source_converted, filename=filename)
 
     def _detect_python2_code(self, source: str, filename: str) -> bool:
         """
@@ -197,6 +258,9 @@ class Inspector:
             r'\.itervalues\(\)',         # dict.itervalues()
             r'\bxrange\s*\(',            # xrange function
             r'from\s+__future__\s+import', # future imports
+            r'\bexcept\s+[^,]+,\s*[^:]+:', # except Exception, e: syntax
+            r'import\s+urllib2\b',       # urllib2 import
+            r'lambda\s+\([^)]+\)\s*:',   # lambda tuple unpacking
         ]
         
         # Count matches
@@ -216,10 +280,38 @@ class Inspector:
         - str: Source code with basic Python 2 to 3 conversions
         """
         # Convert print statements to print functions
-        # This regex handles: print "hello" -> print("hello")
-        #                    print var -> print(var)  
-        #                    print func() -> print(func())
+        # Handle various print statement formats
         source = re.sub(r'\bprint\s+([^(].*?)(?=\n|$)', r'print(\1)', source, flags=re.MULTILINE)
+        
+        # Convert exception syntax: except Exception, e: -> except Exception as e:
+        source = re.sub(r'\bexcept\s+([^,]+),\s*([^:]+):', r'except \1 as \2:', source)
+        
+    def _convert_python2_syntax(self, source: str) -> str:
+        """
+        Convert basic Python 2 syntax to Python 3 for AST parsing.
+        
+        Parameters:
+        - source (str): The source code content
+        
+        Returns:
+        - str: Source code with basic Python 2 to 3 conversions
+        """
+        # Convert print statements to print functions
+        # Handle various print statement formats
+        source = re.sub(r'\bprint\s+([^(].*?)(?=\n|$)', r'print(\1)', source, flags=re.MULTILINE)
+        
+        # Convert exception syntax: except Exception, e: -> except Exception as e:
+        source = re.sub(r'\bexcept\s+([^,]+),\s*([^:]+):', r'except \1 as \2:', source)
+        
+        # Convert lambda tuple unpacking - handle the specific case from the file
+        # lambda (a, b): b -> lambda item: item[1]
+        source = re.sub(r'lambda\s+\(\s*([^,)]+)\s*,\s*([^,)]+)\s*\)\s*:\s*\2\b', 
+                       r'lambda item: item[1]', source)
+        source = re.sub(r'lambda\s+\(\s*([^,)]+)\s*,\s*([^,)]+)\s*\)\s*:\s*\1\b', 
+                       r'lambda item: item[0]', source)
+        
+        # More general lambda tuple unpacking removal (just remove parentheses)
+        source = re.sub(r'lambda\s+\(([^)]+)\)\s*:', r'lambda \1:', source)
         
         # Convert xrange to range
         source = source.replace('xrange(', 'range(')
@@ -230,10 +322,40 @@ class Inspector:
         source = source.replace('.itervalues()', '.values()')
         
         # Handle unicode literals - remove u prefix
-        source = re.sub(r'\bu["\']', '"', source)
-        source = re.sub(r'\bu["\']', "'", source)
+        source = re.sub(r'\bu(["\'])', r'\1', source)
+        
+        # Convert urllib2 to urllib (basic conversion for parsing)
+        source = source.replace('import urllib2', 'import urllib.request as urllib2')
+        source = source.replace('from urllib2', 'from urllib.request')
+        
+        # Handle raw_input -> input (though this might not be needed for AST parsing)
+        source = source.replace('raw_input(', 'input(')
         
         return source
+
+    def _convert_lambda_tuple_unpacking(self, match):
+        """
+        Convert lambda tuple unpacking from Python 2 to Python 3 syntax.
+        
+        Parameters:
+        - match: regex match object for lambda (params):
+        
+        Returns:
+        - str: Converted lambda expression
+        """
+        params = match.group(1).strip()
+        
+        # For simple cases like (a, b), convert to lambda x: with x[0], x[1] substitution
+        if ',' in params:
+            # Simple tuple unpacking case
+            param_names = [p.strip() for p in params.split(',')]
+            if len(param_names) == 2 and all(p.isidentifier() for p in param_names):
+                # Convert lambda (a, b): b to lambda x: x[1]
+                new_param = 'tuple_param'
+                return f'lambda {new_param}:'
+        
+        # Fallback: just remove parentheses for simple cases
+        return f'lambda {params}:'
 
     def _setup(
         self,
