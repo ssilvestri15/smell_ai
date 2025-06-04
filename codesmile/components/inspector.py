@@ -161,7 +161,6 @@ class Inspector:
         if HAS_LIB2TO3:
             # Initialize the Python 2 grammar driver
             self.py2_driver = driver.Driver(pygram.python_grammar, convert=pytree.convert)
-            print("lib2to3 Python 2 parser initialized")
 
     def _parse_with_cascading_fallback(self, source: str, filename: str):
         """
