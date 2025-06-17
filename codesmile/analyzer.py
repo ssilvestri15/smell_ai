@@ -1,5 +1,4 @@
 """Main analyzer module for CodeSmile."""
-
 import os
 import json
 import tempfile
@@ -13,14 +12,16 @@ from .utils.file_utils import FileUtils
 class CodeSmileAnalyzer:
     """Main analyzer class for detecting ML-specific code smells."""
     
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         """Initialize the analyzer."""
+        self.debug = debug
         self.temp_dir = tempfile.mkdtemp()
         self.inspector = Inspector(
             output_path=self.temp_dir,
             dataframe_dict_path=self._get_resource_path("dataframes.csv"),
             model_dict_path=self._get_resource_path("models.csv"),
-            tensor_dict_path=self._get_resource_path("tensors.csv")
+            tensor_dict_path=self._get_resource_path("tensors.csv"),
+            debug=self.debug
         )
     
     def _get_resource_path(self, filename: str) -> str:
@@ -87,7 +88,8 @@ class CodeSmileAnalyzer:
                         smells_by_type[smell_name] = smells_by_type.get(smell_name, 0) + 1
                         
             except Exception as e:
-                print(f"Warning: Error analyzing {file_path}: {e}")
+                if self.debug:
+                    print(f"Warning: Error analyzing {file_path}: {e}")
                 continue
         
         result = {

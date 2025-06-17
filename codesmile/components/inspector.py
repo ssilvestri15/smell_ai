@@ -16,7 +16,6 @@ try:
     HAS_LIB2TO3 = True
 except ImportError:
     HAS_LIB2TO3 = False
-    print("Warning: lib2to3 not available")
 
 
 class Inspector:
@@ -31,6 +30,7 @@ class Inspector:
         dataframe_dict_path: str = "obj_dictionaries/dataframes.csv",
         model_dict_path: str = "obj_dictionaries/models.csv",
         tensor_dict_path: str = "obj_dictionaries/tensors.csv",
+        debug: bool = False,
     ):
         """
         Initializes the Inspector with the output path for
@@ -42,6 +42,7 @@ class Inspector:
         - model_dict_path (str): Path to the model dictionary CSV.
         - tensor_dict_path (str): Path to the tensor operations CSV.
         """
+        self.debug = debug
         self.output_path = output_path
         self._setup(dataframe_dict_path, model_dict_path, tensor_dict_path)
         
@@ -138,20 +139,24 @@ class Inspector:
                             node, function_data, filename, node.name, to_save
                         )
                     except Exception as e:
-                        print(
+                        if self.debug:
+                            print(
                             f"Error processing function '{node.name}' in file "
                             f"'{filename}': {e}"
                         )
                         raise e
 
         except FileNotFoundError as e:
-            print(f"Error: File '{filename}' not found. {e}")
+            if self.debug:
+                print(f"Error: File '{filename}' not found. {e}")
             raise FileNotFoundError(f"Error in file {filename}: {e}")
         except SyntaxError as e:
-            print(f"Syntax error in file '{filename}': {e}")
+            if self.debug:
+                print(f"Syntax error in file '{filename}': {e}")
             raise SyntaxError(f"Error in file {filename}: {e}")
         except Exception as e:
-            print(f"Unexpected error while analyzing file '{filename}': {e}")
+            if self.debug:
+                print(f"Unexpected error while analyzing file '{filename}': {e}")
             raise e
 
         return to_save
@@ -178,15 +183,18 @@ class Inspector:
         """
         # Step 1: Try Python 3 parsing first
         try:
-            print(f"Trying Python 3 parsing for {filename}")
+            if self.debug:
+                print(f"Trying Python 3 parsing for {filename}")
             return ast.parse(source, filename=filename)
         except SyntaxError as py3_error:
-            print(f"Python 3 parsing failed for {filename}: {py3_error}")
+            if self.debug:
+                print(f"Python 3 parsing failed for {filename}: {py3_error}")
             
             # Step 2: Try lib2to3 for Python 2
             if HAS_LIB2TO3:
                 try:
-                    print(f"Trying lib2to3 Python 2 parsing for {filename}")
+                    if self.debug:
+                        print(f"Trying lib2to3 Python 2 parsing for {filename}")
                     
                     # Parse with lib2to3
                     py2_tree = self.py2_driver.parse_string(source + '\n')
@@ -195,23 +203,29 @@ class Inspector:
                     python3_source = self._convert_lib2to3_tree_to_python3(py2_tree, source)
                     
                     # Parse the converted source with standard ast
-                    print(f"Successfully converted Python 2 to Python 3 for {filename}")
+                    if self.debug:
+                        print(f"Successfully converted Python 2 to Python 3 for {filename}")
                     return ast.parse(python3_source, filename=filename)
                     
                 except ParseError as lib2to3_error:
-                    print(f"lib2to3 parsing failed for {filename}: {lib2to3_error}")
+                    if self.debug:
+                        print(f"lib2to3 parsing failed for {filename}: {lib2to3_error}")
                 except Exception as lib2to3_error:
-                    print(f"lib2to3 conversion failed for {filename}: {lib2to3_error}")
+                    if self.debug:
+                        print(f"lib2to3 conversion failed for {filename}: {lib2to3_error}")
             else:
-                print(f"lib2to3 not available for {filename}")
+                if self.debug:
+                    print(f"lib2to3 not available for {filename}")
             
             # Step 3: Use syntax conversion fallback
             try:
-                print(f"Using syntax conversion fallback for {filename}")
+                if self.debug:
+                    print(f"Using syntax conversion fallback for {filename}")
                 source_converted = self._convert_python2_syntax(source)
                 return ast.parse(source_converted, filename=filename)
             except SyntaxError as fallback_error:
-                print(f"All parsing methods failed for {filename}")
+                if self.debug:
+                    print(f"All parsing methods failed for {filename}")
                 # Re-raise the original Python 3 error for better debugging
                 raise py3_error
 
